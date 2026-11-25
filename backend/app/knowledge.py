@@ -68,8 +68,11 @@ class KnowledgeService:
         return self.repo.get(key)
 
     async def reindex(self, key):
-        if not self.repo.get(key):
+        doc = self.repo.get(key)
+        if not doc:
             raise KeyError(key)
+        if doc["status"] in {"pending", "indexing"}:
+            raise ValueError("Document is already queued or indexing")
         if self.queue.full():
             raise ValueError("Index queue full")
         self.repo.status(key, "pending")

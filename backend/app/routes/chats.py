@@ -83,6 +83,18 @@ async def stream_chat(request: Request, body: ChatRequest) -> StreamingResponse:
                 raise HTTPException(
                     503, "Knowledge search unavailable; check indexing and embedding model"
                 ) from exc
+            candidate_chunks = chunks
+            chunks = []
+            evidence_bytes = 0
+            budget = max(
+                0, state.settings.num_ctx - state.settings.num_predict - 1800 - len(text.encode())
+            )
+            for chunk in candidate_chunks:
+                required = len(chunk["text"].encode()) + len(chunk["document_title"].encode()) + 128
+                if evidence_bytes + required > budget:
+                    break
+                chunks.append(chunk)
+                evidence_bytes += required
             citations = [
                 {
                     "document_id": c["document_id"],
@@ -161,6 +173,8 @@ async def stream_chat(request: Request, body: ChatRequest) -> StreamingResponse:
                         yield event("token", content=token)
             status = "complete"
             repo.finish(message_id, "".join(pieces), status)
+            if status == "complete" and run_id:
+                state.runs.finish(run_id, status)
             yield event("done", message_id=message_id)
         except asyncio.CancelledError:
             raise

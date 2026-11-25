@@ -14,6 +14,7 @@ export default function DocumentsPage() {
   const open=useCallback(async(id:string)=>{ try { setPreview(await getDocument(id));setError(""); } catch(e){setError(e instanceof Error?e.message:"预览失败");} },[]);
   useEffect(()=>{ void refresh().catch(e=>setError(e.message));const timer=setInterval(()=>void refresh().catch(()=>undefined),2000);return()=>clearInterval(timer); },[refresh]);
   useEffect(()=>{ const id=params.get("id");if(id) void open(id); },[params,open]);
+  useEffect(()=>{ if(preview&&params.get("chunk"))document.getElementById(params.get("chunk")!)?.scrollIntoView({block:"center"}); },[preview,params]);
   const upload=async(files:FileList|null)=>{
     if(!files)return;setBusy(true);setError("");
     try { for(const file of Array.from(files)) await uploadDocument(file);await refresh(); }

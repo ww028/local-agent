@@ -35,17 +35,26 @@ class ChatRepository:
         return dict(row) if row else None
 
     def list_all(self) -> list[dict]:
-        return [dict(row) for row in self._conn.execute(
-            "SELECT * FROM conversations ORDER BY updated_at DESC"
-        )]
+        return [
+            dict(row)
+            for row in self._conn.execute("SELECT * FROM conversations ORDER BY updated_at DESC")
+        ]
 
     def messages(self, key: str) -> list[dict]:
-        return [{**dict(row),"citations":json.loads(row["citations"] or "[]")} for row in self._conn.execute(
-            "SELECT * FROM messages WHERE conversation_id = ? ORDER BY id", (key,)
-        )]
+        return [
+            {**dict(row), "citations": json.loads(row["citations"] or "[]")}
+            for row in self._conn.execute(
+                "SELECT * FROM messages WHERE conversation_id = ? ORDER BY id", (key,)
+            )
+        ]
 
     def delete(self, key: str) -> None:
         with self._conn:
+            for row in self._conn.execute(
+                "SELECT run_id FROM runs WHERE conversation_id=?", (key,)
+            ):
+                self._conn.execute("DELETE FROM run_events WHERE run_id=?", (row[0],))
+            self._conn.execute("DELETE FROM runs WHERE conversation_id=?", (key,))
             self._conn.execute("DELETE FROM conversations WHERE conversation_id = ?", (key,))
 
     def start_turn(self, key: str, text: str, model: str) -> int:
@@ -53,14 +62,18 @@ class ChatRepository:
         with self._conn:
             self._conn.execute(
                 "INSERT INTO messages (conversation_id, role, content, created_at, status, model) "
-                "VALUES (?, 'user', ?, ?, 'complete', ?)", (key, text, timestamp, model),
+                "VALUES (?, 'user', ?, ?, 'complete', ?)",
+                (key, text, timestamp, model),
             )
             cursor = self._conn.execute(
                 "INSERT INTO messages (conversation_id, role, content, created_at, status, model) "
-                "VALUES (?, 'assistant', '', ?, 'generating', ?)", (key, timestamp, model),
+                "VALUES (?, 'assistant', '', ?, 'generating', ?)",
+                (key, timestamp, model),
             )
-            self._conn.execute("UPDATE conversations SET updated_at = ? WHERE conversation_id = ?",
-                               (timestamp, key))
+            self._conn.execute(
+                "UPDATE conversations SET updated_at = ? WHERE conversation_id = ?",
+                (timestamp, key),
+            )
         return int(cursor.lastrowid)
 
     def finish(self, message_id: int, text: str, status: str, error: str | None = None) -> None:
@@ -76,9 +89,16 @@ class ChatRepository:
         rows = self.messages(key)
         result: list[ChatMessage] = []
         for i in range(0, len(rows) - 1, 2):
-            user, assistant = rows[i:i + 2]
-            if (user["role"] == "user" and assistant["role"] == "assistant"
-                    and assistant["status"] == "complete"):
-                result.extend([ChatMessage(role="user", content=user["content"]),
-                               ChatMessage(role="assistant", content=assistant["content"])])
+            user, assistant = rows[i : i + 2]
+            if (
+                user["role"] == "user"
+                and assistant["role"] == "assistant"
+                and assistant["status"] == "complete"
+            ):
+                result.extend(
+                    [
+                        ChatMessage(role="user", content=user["content"]),
+                        ChatMessage(role="assistant", content=assistant["content"]),
+                    ]
+                )
         return result

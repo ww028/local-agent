@@ -8,7 +8,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [active, setActive] = useState<string | null>(null);
+  const [active, setActive] = useState<string | null>(sessionStorage.getItem("local-agent-active"));
   const [models, setModels] = useState<ModelList | null>(null);
   const [model, setModel] = useState("");
   const [mode,setMode] = useState<"chat"|"knowledge"|"agent">("chat");
@@ -34,8 +34,11 @@ export default function ChatPage() {
   }, []);
   useEffect(() => {
     void Promise.all([refresh(), refreshModels()]).catch(e => setError(String(e.message)));
+    const key=sessionStorage.getItem("local-agent-active");
+    if(key) void getChat(key).then(result=>setMessages(result.messages)).catch(()=>setActive(null));
     return () => controller.current?.abort();
   }, [refresh, refreshModels]);
+  useEffect(()=>{ if(active)sessionStorage.setItem("local-agent-active",active);else sessionStorage.removeItem("local-agent-active"); },[active]);
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [messages]);
 
   const open = async (id: string) => {
