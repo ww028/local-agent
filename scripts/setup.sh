@@ -12,4 +12,5 @@ if [[ ! -d "$ROOT/backend/.venv" ]]; then
 fi
 "$ROOT/backend/.venv/bin/python" -m pip install --index-url https://pypi.org/simple -r "$ROOT/backend/requirements-dev.txt"
 (cd "$ROOT/frontend" && npm ci --registry=https://registry.npmjs.org --ignore-scripts --no-audit --no-fund)
-printf 'Dependencies ready. Start Ollama separately, then run bash scripts/dev.sh.\n'
+(cd "$ROOT/frontend" && npm run build)
+printf 'Dependencies and assets ready. Run bash scripts/start.sh for local use, or scripts/dev.sh for development.\n'

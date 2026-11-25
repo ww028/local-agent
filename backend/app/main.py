@@ -2,8 +2,11 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.agent.executor import Executor
@@ -85,7 +88,17 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
 
     @app.get("/health")
     async def health() -> dict:
-        return {"status": "ok", "phase": 2, "knowledge_base": True}
+        return {"status": "ok", "phase": 3, "knowledge_base": True, "agent": True}
+
+    dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    if (dist / "index.html").exists():
+        app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+
+        @app.get("/{route:path}", include_in_schema=False)
+        async def web(route: str):
+            if route not in {"", "documents"}:
+                raise HTTPException(404, "Not found")
+            return FileResponse(dist / "index.html")
 
     return app
 

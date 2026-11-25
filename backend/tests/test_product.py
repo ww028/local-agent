@@ -63,6 +63,7 @@ def test_end_to_end_mock(tmp_path):
         assert (
             c.post("/api/chats/stream", json={"message": "x", "temperature": 5}).status_code == 422
         )
+        assert c.get("/api/unknown").status_code == 404
         assert c.get("/api/documents/../../etc/passwd").status_code == 404
         assert c.delete("/api/documents/" + key).status_code == 200
         assert c.post("/api/knowledge/search", json={"query": "蓝莓"}).json()["chunks"] == []
