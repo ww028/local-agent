@@ -3,14 +3,17 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.config import Settings, get_settings
-from app.ollama_client import OllamaChatModel
-from app.routes import chats, models
+from app.knowledge import KnowledgeService
+from app.ollama_client import OllamaChatModel, OllamaEmbeddingModel
+from app.routes import chats, documents, models
 from app.store.chats import ChatRepository
 from app.store.db import get_connection
+from app.store.documents import DocumentRepository
+from app.store.vector_store import LanceDBStore
 
 
 def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
@@ -24,9 +27,13 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
         app.state.chat_model = chat_model or OllamaChatModel(config)
         app.state.chat_lock = asyncio.Lock()
         app.state.active_conversation = None
+        app.state.knowledge = KnowledgeService(config, DocumentRepository(conn), LanceDBStore(config),
+                                               OllamaEmbeddingModel(config))
+        await app.state.knowledge.start()
         try:
             yield
         finally:
+            await app.state.knowledge.stop()
             conn.close()
 
     app = FastAPI(title="local-agent", version="0.1.0", lifespan=lifespan,
@@ -55,15 +62,11 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
 
     app.include_router(models.router)
     app.include_router(chats.router)
+    app.include_router(documents.router)
 
     @app.get("/health")
     async def health() -> dict:
-        return {"status": "ok", "phase": 1, "knowledge_base": False}
-
-    @app.api_route("/api/documents", methods=["GET", "POST", "DELETE"])
-    @app.api_route("/api/documents/{key}", methods=["DELETE"])
-    async def documents_unavailable():
-        raise HTTPException(501, "Document ingestion is scheduled for phase 2.")
+        return {"status": "ok", "phase": 2, "knowledge_base": True}
 
     return app
 

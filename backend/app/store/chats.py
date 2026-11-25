@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -39,7 +40,7 @@ class ChatRepository:
         )]
 
     def messages(self, key: str) -> list[dict]:
-        return [dict(row) for row in self._conn.execute(
+        return [{**dict(row),"citations":json.loads(row["citations"] or "[]")} for row in self._conn.execute(
             "SELECT * FROM messages WHERE conversation_id = ? ORDER BY id", (key,)
         )]
 

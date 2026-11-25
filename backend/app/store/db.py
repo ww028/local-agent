@@ -65,6 +65,19 @@ def get_connection(settings: Settings) -> sqlite3.Connection:
     }.items():
         if name not in columns:
             conn.execute(f"ALTER TABLE messages ADD COLUMN {name} {declaration}")
+    for table, additions in {
+        "documents": {"status": "TEXT NOT NULL DEFAULT 'pending'", "error": "TEXT",
+                      "content_hash": "TEXT", "byte_size": "INTEGER DEFAULT 0",
+                      "indexed_chunks": "INTEGER DEFAULT 0", "version": "INTEGER DEFAULT 1"},
+        "chunks": {"start_line": "INTEGER DEFAULT 1", "end_line": "INTEGER DEFAULT 1"},
+        "messages": {"citations": "TEXT NOT NULL DEFAULT '[]'"},
+    }.items():
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for name, declaration in additions.items():
+            if name not in columns:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
+    conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_id UNINDEXED, terms)")
+    conn.execute("UPDATE documents SET status = 'pending' WHERE status = 'indexing'")
     conn.execute("UPDATE messages SET status = 'interrupted' WHERE status = 'generating'")
     conn.commit()
     return conn

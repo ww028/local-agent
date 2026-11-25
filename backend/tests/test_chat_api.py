@@ -34,7 +34,7 @@ class FakeModel:
 @pytest.fixture
 def setup(tmp_path):
     settings = Settings(_env_file=None, db_path=tmp_path / "chat.db",
-                        data_dir=tmp_path, llm_model="test:local")
+                        data_dir=tmp_path, lancedb_dir=tmp_path / "lance", llm_model="test:local")
     model = FakeModel()
     return create_app(settings, model), model
 
@@ -88,11 +88,11 @@ def test_invalid_inputs_and_no_side_effects(setup):
     with TestClient(app, base_url="http://127.0.0.1") as client:
         assert send(client, model="missing").status_code == 503
         assert send(client, conversation_id="missing").status_code == 404
-        assert send(client, use_knowledge_base=True).status_code == 501
+        assert send(client, use_knowledge_base=True).status_code == 409
         assert send(client, message=" ").status_code == 422
         assert send(client, message="汉" * 4000).status_code == 413
         assert client.get("/api/chats").json()["conversations"] == []
-        assert client.get("/api/documents").status_code == 501
+        assert client.get("/api/documents").status_code == 200
         assert client.post("/api/chats/stream", json={"message": "x"},
                            headers={"Origin": "https://example.com"}).status_code == 403
 

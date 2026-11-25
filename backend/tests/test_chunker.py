@@ -8,7 +8,7 @@ def test_chunks_carry_nearest_heading() -> None:
     chunks = chunk_markdown(markdown, chunk_size=100, overlap=10, document_id="doc")
     headings = [c.heading for c in chunks]
     assert headings[0] == "Intro"
-    assert "Detail" in headings
+    assert "Intro / Detail" in headings
 
 
 def test_long_section_is_split_with_overlap() -> None:

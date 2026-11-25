@@ -1,56 +1,68 @@
-"""LanceDB-backed vector store.
+"""Embedded LanceDB adapter with serialized writes and threaded blocking calls."""
 
-Implements the ``VectorStore`` interface. LanceDB handles semantic retrieval;
-keyword (BM25) hybrid search can be layered on top later. The implementation
-is wired to the interface so another store could replace it without touching
-the RAG or agent layers.
-"""
+import asyncio
 
-from __future__ import annotations
-
-from typing import Sequence
+import lancedb
 
 from app.config import Settings
-from app.schemas import RetrievedChunk
 
 
 class LanceDBStore:
-    def __init__(self, settings: Settings) -> None:
-        self._settings = settings
-        self._db = None
+    def __init__(self, settings: Settings):
+        self.db = lancedb.connect(str(settings.lancedb_dir))
+        self.lock = asyncio.Lock()
 
-    def _connect(self) -> None:
-        if self._db is None:
-            import lancedb
+    def table(self):
+        try:
+            return self.db.open_table("chunks")
+        except (ValueError, FileNotFoundError):
+            return None
 
-            self._settings.ensure_dirs()
-            self._db = lancedb.connect(str(self._settings.lancedb_dir))
+    async def upsert(self, *, document_id: str, chunks: list[dict], vectors: list[list[float]]):
+        if len(chunks) != len(vectors) or not chunks:
+            raise ValueError("Embedding count mismatch")
+        rows = [
+            {"chunk_id": c["chunk_id"], "document_id": document_id, "text": c["text"], "vector": v}
+            for c, v in zip(chunks, vectors)
+        ]
+        async with self.lock:
 
-    async def upsert(
-        self,
-        *,
-        document_id: str,
-        chunks: list[dict],
-        vectors: list[list[float]],
-    ) -> None:
-        self._connect()
-        # TODO: open (or create) the chunks table, delete existing rows for this
-        # document_id, then insert chunk metadata + vector columns.
-        raise NotImplementedError("LanceDB upsert is not implemented yet.")
+            def write():
+                table = self.table()
+                if table is None:
+                    self.db.create_table("chunks", data=rows)
+                else:
+                    table.delete(f"document_id = '{document_id}'")
+                    table.add(rows)
 
-    async def search(
-        self,
-        query_vector: list[float],
-        *,
-        top_k: int,
-        accessible_document_ids: Sequence[str] | None = None,
-    ) -> list[RetrievedChunk]:
-        self._connect()
-        # TODO: run vector search, apply document-id filter when provided, map
-        # rows back to RetrievedChunk.
-        raise NotImplementedError("LanceDB search is not implemented yet.")
+            await asyncio.to_thread(write)
 
-    async def delete_document(self, document_id: str) -> None:
-        self._connect()
-        # TODO: delete all rows matching document_id.
-        raise NotImplementedError("LanceDB delete is not implemented yet.")
+    async def search(self, vector: list[float], *, top_k: int, accessible_document_ids: list[str]):
+        if not accessible_document_ids:
+            return []
+        async with self.lock:
+
+            def query():
+                table = self.table()
+                if table is None:
+                    return []
+                scope = ",".join("'" + key + "'" for key in accessible_document_ids)
+                return (
+                    table.search(vector)
+                    .metric("cosine")
+                    .where(f"document_id IN ({scope})", prefilter=True)
+                    .limit(top_k)
+                    .to_list()
+                )
+
+            return await asyncio.to_thread(query)
+
+    async def delete_document(self, key: str):
+        async with self.lock:
+
+            def remove():
+                table = self.table()
+                if table is not None:
+                    table.delete(f"document_id = '{key}'")
+
+            await asyncio.to_thread(remove)
