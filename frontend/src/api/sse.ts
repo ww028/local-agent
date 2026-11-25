@@ -42,7 +42,7 @@ export async function consumeSSE(
   }
 }
 export async function streamChat(
-  body: { message: string; model: string; conversation_id?: string | null; use_knowledge_base?: boolean; mode?: "chat"|"knowledge"|"agent" },
+  body: { message: string; model: string; conversation_id?: string | null; use_knowledge_base?: boolean; temperature?: number; mode?: "chat"|"knowledge"|"agent" },
   onEvent: (event: StreamEvent) => void, signal: AbortSignal,
 ): Promise<void> {
   const response = await fetch("/api/chats/stream", {

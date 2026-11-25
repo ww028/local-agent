@@ -19,6 +19,9 @@ export async function listChats(): Promise<{ conversations: Conversation[] }> {
 export async function getChat(id: string): Promise<{ conversation: Conversation; messages: SavedMessage[] }> {
   return parseJson(await fetch(`/api/chats/${encodeURIComponent(id)}`));
 }
+export async function renameChat(id: string,title: string): Promise<void> {
+  await parseJson(await fetch(`/api/chats/${encodeURIComponent(id)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({title})}));
+}
 export async function deleteChat(id: string): Promise<void> {
   await parseJson(await fetch(`/api/chats/${encodeURIComponent(id)}`, { method: "DELETE" }));
 }

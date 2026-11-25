@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteChat, getChat, getModels, listChats } from "../api/client";
+import { deleteChat, getChat, getModels, listChats, renameChat } from "../api/client";
 import { streamChat } from "../api/sse";
 import type { Conversation, ModelList, SavedMessage } from "../api/types";
 import MessageBubble from "../components/MessageBubble";
@@ -11,8 +11,9 @@ export default function ChatPage() {
   const [active, setActive] = useState<string | null>(null);
   const [models, setModels] = useState<ModelList | null>(null);
   const [model, setModel] = useState("");
-  const [knowledge, setKnowledge] = useState(false);
-  const [agentMode,setAgentMode] = useState(false);
+  const [mode,setMode] = useState<"chat"|"knowledge"|"agent">("chat");
+  const [search,setSearch] = useState("");
+  const [temperature,setTemperature] = useState(0.3);
   const [steps,setSteps] = useState<{seq:number;kind:string;data:Record<string,unknown>}[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -71,7 +72,7 @@ export default function ChatPage() {
     const update = (fn: (message: SavedMessage) => SavedMessage) =>
       setMessages(previous => previous.map(m => m.id === assistantId ? fn(m) : m));
     try {
-      await streamChat({ message: text, model, conversation_id: key, use_knowledge_base: knowledge && !agentMode, mode: agentMode?"agent":"chat" }, event => {
+      await streamChat({ message: text, model, conversation_id: key, use_knowledge_base: mode==="knowledge", mode, temperature }, event => {
         if (event.type === "meta" && event.conversation_id) {
           key = event.conversation_id; setActive(key);
           if(event.run_id) update(m=>({...m,run_id:event.run_id}));
@@ -109,7 +110,8 @@ export default function ChatPage() {
   return <div className="workbench">
     <aside className="history">
       <button disabled={busy} onClick={() => { setActive(null); setMessages([]); setError(""); }}>＋ 新会话</button>
-      {conversations.map(chat => <div className={`history-item ${active === chat.conversation_id ? "selected" : ""}`} key={chat.conversation_id}>
+      <input aria-label="搜索会话" className="history-search" placeholder="搜索会话" value={search} onChange={e=>setSearch(e.target.value)} />
+      {conversations.filter(chat=>chat.title.toLowerCase().includes(search.toLowerCase())).map(chat => <div className={`history-item ${active === chat.conversation_id ? "selected" : ""}`} key={chat.conversation_id}>
         <button disabled={busy} onClick={() => void open(chat.conversation_id)}>{chat.title}</button>
         <button aria-label="删除会话" disabled={busy} onClick={() => void remove(chat.conversation_id)}>×</button>
       </div>)}
@@ -121,10 +123,14 @@ export default function ChatPage() {
           {models?.available.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
         </select></label>
         <button disabled={busy} onClick={() => void refreshModels().catch(e => setError(e.message))}>刷新</button>
-        <label><input type="checkbox" disabled={busy} checked={knowledge} onChange={e=>setKnowledge(e.target.checked)} /> 知识库问答</label>
-        <label><input type="checkbox" disabled={busy} checked={agentMode} onChange={e=>setAgentMode(e.target.checked)} /> Agent 工具模式</label>
-        <span className="badge">本地 · {agentMode?"只读工具执行":knowledge?"引用资料":"自由对话"}</span>
+        <select aria-label="工作模式" value={mode} disabled={busy} onChange={e=>setMode(e.target.value as typeof mode)}><option value="chat">自由对话</option><option value="knowledge">知识库问答</option><option value="agent">Agent 工具</option></select>
+        <span className="badge">仅本地 · 只读工具</span>
       </header>
+      <div className="session-toolbar">
+        <label>创造性 <input aria-label="创造性" type="range" min="0" max="1" step="0.1" value={temperature} disabled={busy||mode==="agent"} onChange={e=>setTemperature(Number(e.target.value))} /> {temperature}</label>
+        {active&&<button disabled={busy} onClick={()=>{const title=prompt("会话新名称",conversations.find(c=>c.conversation_id===active)?.title);if(title)void renameChat(active,title).then(refresh).catch(e=>setError(e.message));}}>重命名</button>}
+        {messages.length>0&&<button disabled={busy} onClick={()=>{const content=messages.map(m=>`## ${m.role==="user"?"用户":"助手"}\n\n${m.content}`).join("\n\n");const url=URL.createObjectURL(new Blob([content],{type:"text/markdown;charset=utf-8"}));const a=document.createElement("a");a.href=url;a.download="local-agent-chat.md";a.click();URL.revokeObjectURL(url);}}>导出 Markdown</button>}
+      </div>
       {models?.status === "unavailable" && <p role="alert" className="error">{models.error}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       <div className="messages" aria-live="polite">

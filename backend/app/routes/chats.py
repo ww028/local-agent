@@ -7,6 +7,7 @@ from contextlib import aclosing
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from app.chat_context import compose_chat
 from app.ollama_client import ModelError
@@ -39,6 +40,23 @@ async def delete_chat(key: str, request: Request) -> dict:
         raise HTTPException(404, "Conversation not found.")
     state.chat_repo.delete(key)
     return {"deleted": key}
+
+
+class RenameRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+
+
+@router.patch("/{key}")
+async def rename_chat(key: str, request: Request, body: RenameRequest):
+    repo = request.app.state.chat_repo
+    if not repo.get(key):
+        raise HTTPException(404, "Conversation not found")
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(422, "Title must not be blank")
+    with repo._conn:
+        repo._conn.execute("UPDATE conversations SET title=? WHERE conversation_id=?", (title, key))
+    return repo.get(key)
 
 
 @router.post("/stream")
@@ -133,7 +151,9 @@ async def stream_chat(request: Request, body: ChatRequest) -> StreamingResponse:
                             pieces.append(item["content"])
                         yield event(item.pop("type"), **item)
             else:
-                async with aclosing(state.chat_model.achat(messages, model=model)) as stream:
+                async with aclosing(
+                    state.chat_model.achat(messages, model=model, temperature=body.temperature)
+                ) as stream:
                     async for token in stream:
                         if await request.is_disconnected():
                             return

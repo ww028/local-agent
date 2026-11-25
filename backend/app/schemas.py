@@ -49,6 +49,7 @@ class ChatRequest(BaseModel):
     conversation_id: str | None = None
     use_knowledge_base: bool = False
     mode: Literal["chat", "knowledge", "agent"] = "chat"
+    temperature: float | None = Field(default=None,ge=0,le=2)
     model: str | None = Field(default=None, max_length=200)
     top_k: int | None = Field(default=None, ge=1, le=20)
 

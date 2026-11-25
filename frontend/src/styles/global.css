@@ -32,6 +32,11 @@ select { max-width: 300px; border: 1px solid #d7deea; border-radius: 6px; paddin
 .composer { display: flex; gap: 10px; padding-top: 12px; }
 .composer textarea { flex: 1; min-width: 0; resize: vertical; border: 1px solid #d7deea; border-radius: 8px; padding: 10px; }
 .error { color: #b13434; font-size: 13px; }
+.run-panel { margin: 8px 0; padding: 10px; background: #f1f5fb; border-radius: 8px; max-height: 240px; overflow: auto; }
+.run-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.session-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 0; font-size: 12px; }
+.history-search { width: 100%; border: 1px solid #d7deea; border-radius: 8px; padding: 8px; margin-bottom: 12px; }
+.chat-toolbar select { max-width: 220px; }
 .knowledge-page { height: 100%; display: flex; flex-direction: column; }
 .knowledge-page header p { color: #79859a; }
 .knowledge-layout { display: flex; gap: 20px; flex: 1; min-height: 0; }

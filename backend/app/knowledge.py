@@ -46,6 +46,10 @@ class KnowledgeService:
             raise ValueError("Invalid text document")
         if self.queue.full():
             raise ValueError("Index queue full; wait for current documents")
+        digest = hashlib.sha256(data).hexdigest()
+        for doc in self.repo.list_all():
+            if doc["content_hash"] == digest:
+                return doc
         key = uuid.uuid4().hex
         chunks = chunk_markdown(
             text,
