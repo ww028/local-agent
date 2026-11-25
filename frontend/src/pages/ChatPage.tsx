@@ -12,6 +12,8 @@ export default function ChatPage() {
   const [models, setModels] = useState<ModelList | null>(null);
   const [model, setModel] = useState("");
   const [knowledge, setKnowledge] = useState(false);
+  const [agentMode,setAgentMode] = useState(false);
+  const [steps,setSteps] = useState<{seq:number;kind:string;data:Record<string,unknown>}[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const controller = useRef<AbortController | null>(null);
@@ -62,16 +64,20 @@ export default function ChatPage() {
     let key = active;
     const userId = -Date.now();
     const assistantId = userId - 1;
-    setInput(""); setError(""); setBusy(true);
+    setInput(""); setError(""); setBusy(true); setSteps([]);
     setMessages(previous => [...previous,
       { id: userId, role: "user", content: text, status: "complete" },
       { id: assistantId, role: "assistant", content: "", status: "generating", model }]);
     const update = (fn: (message: SavedMessage) => SavedMessage) =>
       setMessages(previous => previous.map(m => m.id === assistantId ? fn(m) : m));
     try {
-      await streamChat({ message: text, model, conversation_id: key, use_knowledge_base: knowledge }, event => {
+      await streamChat({ message: text, model, conversation_id: key, use_knowledge_base: knowledge && !agentMode, mode: agentMode?"agent":"chat" }, event => {
         if (event.type === "meta" && event.conversation_id) {
           key = event.conversation_id; setActive(key);
+          if(event.run_id) update(m=>({...m,run_id:event.run_id}));
+        } else if(event.type === "step" && event.event) {
+          const step=event.event;
+          setSteps(previous=>[...previous,step]);
         } else if (event.type === "token") {
           update(m => ({ ...m, content: m.content + (event.content ?? "") }));
         } else if (event.type === "citation") {
@@ -116,7 +122,8 @@ export default function ChatPage() {
         </select></label>
         <button disabled={busy} onClick={() => void refreshModels().catch(e => setError(e.message))}>刷新</button>
         <label><input type="checkbox" disabled={busy} checked={knowledge} onChange={e=>setKnowledge(e.target.checked)} /> 知识库问答</label>
-        <span className="badge">本地 · {knowledge?"引用资料":"自由对话"}</span>
+        <label><input type="checkbox" disabled={busy} checked={agentMode} onChange={e=>setAgentMode(e.target.checked)} /> Agent 工具模式</label>
+        <span className="badge">本地 · {agentMode?"只读工具执行":knowledge?"引用资料":"自由对话"}</span>
       </header>
       {models?.status === "unavailable" && <p role="alert" className="error">{models.error}</p>}
       {error && <p role="alert" className="error">{error}</p>}
@@ -125,6 +132,7 @@ export default function ChatPage() {
         {messages.map(message => <MessageBubble key={message.id} message={message} />)}
         <div ref={end} />
       </div>
+      {steps.length>0 && <details open className="run-panel"><summary>执行过程 · {steps.length} 个事件</summary>{steps.map(step=><div key={step.seq}><strong>{step.kind}</strong><pre>{JSON.stringify(step.data,null,2)}</pre></div>)}</details>}
       <div className="composer">
         <textarea aria-label="消息" value={input} disabled={busy} onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }}

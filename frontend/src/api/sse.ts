@@ -14,7 +14,7 @@ export async function consumeSSE(
       .map(line => line.slice(5).trimStart()).join("\n");
     if (!data) return;
     const event = JSON.parse(data) as StreamEvent;
-    if (!["meta", "token", "citation", "error", "done"].includes(event.type)) {
+    if (!["meta", "token", "citation", "step", "error", "done"].includes(event.type)) {
       throw new Error("Invalid stream event.");
     }
     terminal ||= event.type === "done" || event.type === "error";
@@ -42,7 +42,7 @@ export async function consumeSSE(
   }
 }
 export async function streamChat(
-  body: { message: string; model: string; conversation_id?: string | null; use_knowledge_base?: boolean },
+  body: { message: string; model: string; conversation_id?: string | null; use_knowledge_base?: boolean; mode?: "chat"|"knowledge"|"agent" },
   onEvent: (event: StreamEvent) => void, signal: AbortSignal,
 ): Promise<void> {
   const response = await fetch("/api/chats/stream", {

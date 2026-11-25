@@ -6,7 +6,9 @@ export interface Citation {
   snippet: string;
 }
 export interface StreamEvent {
-  type: "meta" | "token" | "citation" | "done" | "error";
+  type: "meta" | "token" | "citation" | "step" | "done" | "error";
+  run_id?: string;
+  event?: { seq: number; kind: string; data: Record<string,unknown> };
   conversation_id?: string;
   message_id?: number;
   model?: string;
@@ -34,6 +36,7 @@ export interface SavedMessage {
   model?: string;
   error?: string;
   citations?: Citation[];
+  run_id?: string;
 }
 export interface DocumentMeta {
   document_id: string;
