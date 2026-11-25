@@ -1,0 +1,107 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.layout {
+  display: flex;
+  height: 100vh;
+}
+
+.sidebar {
+  width: 220px;
+  padding: 16px;
+  border-right: 1px solid rgba(128, 128, 128, 0.3);
+}
+
+.brand {
+  font-size: 18px;
+  margin: 0 0 16px;
+}
+
+.sidebar nav a {
+  display: block;
+  padding: 8px 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bubble {
+  max-width: 72%;
+  padding: 10px 14px;
+  border-radius: 10px;
+}
+
+.bubble.user {
+  align-self: flex-end;
+}
+
+.bubble.assistant {
+  align-self: flex-start;
+}
+
+.citations {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.citation {
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+}
+
+.composer {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.composer textarea {
+  flex: 1;
+  resize: vertical;
+  padding: 8px;
+}
+
+.documents ul {
+  list-style: none;
+  padding: 0;
+}
+
+.documents li {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+}

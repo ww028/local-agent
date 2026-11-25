@@ -1,0 +1,33 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/
+frontend/*.log
+
+# --- Local runtime data (never commit) ---
+.env
+data/
+*.db
+*.db-shm
+*.db-wal
+lancedb/
+
+# --- Model / cache ---
+*.gguf
+.ollama/
+
+# --- OS / editor ---
+.DS_Store
+*.log
+.idea/
+.vscode/
