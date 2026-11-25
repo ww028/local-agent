@@ -1,57 +1,91 @@
-# Setup
+# Setup (phase 1)
 
 ## Prerequisites
 
-- **Python 3.11–3.13** (3.14 is very new; some dependencies may not have wheels
-  yet, so a 3.11–3.13 virtualenv is recommended).
-- **Node 20+** and npm.
-- **Ollama** installed and running (<http://localhost:11434>).
+- Python 3.11–3.14. Python 3.14 is used for local phase-1 tests; CI uses 3.12.
+  Optional RAG packages are separate and have not been validated on 3.14 yet.
+- Node **20.19+ or 22.12+** (Vite 7), npm.
+- Ollama installed separately and running locally. Only installed local chat
+  models are accepted; cloud stubs and embedding-only models are blocked.
 
-## Backend
+## Start
+
+```bash
+git clone https://github.com/ww028/local-agent.git
+cd local-agent
+cp .env.example .env
+bash scripts/setup.sh
+# In a separate terminal, if Ollama is not already running:
+bash scripts/ollama.sh serve
+# Download a chat model while online, before offline use:
+# bash scripts/ollama.sh pull qwen3:14b
+bash scripts/dev.sh
+```
+
+Open **http://127.0.0.1:5173** (or the configured frontend port).
+Select an installed chat model, send a message, stop generation, open a saved
+conversation or create a new one. Changing models applies to the next message.
+Model selection verifies capabilities before any message is sent to Ollama.
+No weights are downloaded by `setup.sh`, the app or its model-list endpoint.
+
+The embedding model is **not required for phase 1**. Document ingestion and
+knowledge retrieval return an explicit “not implemented” response rather than
+silently falling back to ungrounded chat. Knowledge-base UI is a placeholder.
+
+## Configuration and data
+
+The backend reads the repository-root `.env`, regardless of its working directory.
+Relative data paths resolve against the repository root. Defaults bind to
+loopback only. The frontend development proxy reads `BACKEND_PORT` and
+`FRONTEND_PORT` from that same configuration file; no server secrets are exposed
+as frontend environment variables.
+
+`NUM_CTX` reserves `NUM_PREDICT` tokens for output. Input budgeting conservatively
+uses UTF-8 bytes plus overhead, not an exact model tokenizer. Older completed
+turns are omitted as pairs when they exceed the budget. Oversized new messages
+are rejected. The model's actual native context limit must be checked separately.
+
+SQLite stores messages and generation states: complete / generating / error /
+interrupted. Abandoned generations become interrupted on startup. Cancellation
+stores partial output; failed/interrupted turns do not enter future prompts.
+The API accepts only **one generation at a time**; run **one backend worker**.
+Do not run two instances against the same database.
+
+`.env`, `.venv`, `node_modules`, databases and runtime data are not committed.
+Back up `data/` with the application stopped. This is single-user developer
+software, not an authenticated multi-user or internet-facing service.
+
+## Offline and security boundary
+
+Install packages and download weights while online; runtime chat is local.
+Ollama HTTP clients ignore environment proxies and reject non-loopback URLs.
+Browser-origin and Host checks reject unexpected sites; output rendering does
+not load remote images or enable navigation links. These are basic safeguards,
+not a security sandbox or enterprise certification. No telemetry or contribution
+collector is configured by this project. Never upload private documents into
+issues, test fixtures, logs, or repository history.
+
+## Test
 
 ```bash
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-dev.txt
+.venv/bin/python -m pytest -q
+.venv/bin/ruff check app tests
+cd ../frontend
+npm test
+npm run build
 ```
 
-Run the API:
+The local launcher `scripts/ollama.sh` accepts the CLI in PATH or the official
+macOS application's embedded CLI. It binds to loopback, disables cloud, allows
+one loaded model and one generation, and unloads idle weights after five minutes.
+No login item or automatic system startup is installed by this script.
 
-```bash
-uvicorn app.main:app --reload --port 8000
-```
-
-Check health: <http://localhost:8000/health>
-
-## Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open the printed URL (default <http://localhost:5173>). Vite proxies `/api` to
-the backend on port 8000.
-
-## Models
-
-Pull the local models (see [models.md](models.md) for options):
-
-```bash
-ollama pull qwen3:14b
-ollama pull bge-m3
-```
-
-## Configuration
-
-Copy `.env.example` to `.env` and adjust model names, ports, paths and RAG
-tuning. `.env` and `data/` are gitignored.
-
-## Tests
-
-```bash
-cd backend
-pytest
-```
+Automated tests use fake models and HTTP transports and do not require Ollama,
+network access or weights. For a real-model smoke test after starting services:
+`backend/.venv/bin/python scripts/smoke-local.py` from the repository root.
+The smoke test uses fictional prompts; measurements are saved in gitignored
+`data/`. Physical offline operation and broad model quality remain separate
+acceptance items.
+The Vite development server is used for the local workbench; `npm run build`
+validates assets but is not yet a packaged deployment server.

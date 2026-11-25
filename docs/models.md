@@ -18,7 +18,7 @@ before distribution or commercial use.
 
 | Role            | Candidate               | Notes                                            |
 | --------------- | ----------------------- | ------------------------------------------------ |
-| Preferred       | `bge-m3`                | Multilingual, dense + sparse + multi-vector, 8K context. |
+| Preferred       | `bge-m3`                | Multilingual; this Ollama adapter consumes dense vectors only. BM25 would be a separate index. |
 | Light multilingual | `nomic-embed-text-v2-moe` | Lower footprint.                             |
 | Long context    | `qwen3-embedding:0.6b`  | 32K context.                                     |
 
@@ -29,6 +29,17 @@ before distribution or commercial use.
   comfortably with headroom for the KV cache.
 - Large parameters and long context compete for the same memory; keep
   `num_ctx` moderate in RAG mode, where only retrieved chunks are injected.
+
+## Verified initial download
+
+The initial local chat model is `qwen3:14b`, Q4_K_M, approximately 9.3 GB,
+with Apache-2.0 model license, as listed by the official model registry:
+https://ollama.com/library/qwen3:14b
+
+The application uses `think: false` for phase-1 answer-only streams and an
+8K context budget; it does not claim full native context performance. Model
+file size is not total runtime memory. Record actual runtime measurements
+separately after installation.
 
 ## Licensing note
 

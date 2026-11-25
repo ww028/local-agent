@@ -16,7 +16,7 @@ from app.schemas import ChatMessage, RetrievedChunk
 class ChatModel(Protocol):
     """A chat / reasoning backend."""
 
-    async def achat(
+    def achat(
         self,
         messages: Sequence[ChatMessage],
         *,

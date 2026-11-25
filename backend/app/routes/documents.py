@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, UploadFile, File, HTTPException
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -26,7 +26,6 @@ async def ingest_document(request: Request, file: UploadFile = File(...)) -> dic
 @router.delete("/{document_id}")
 def delete_document(request: Request, document_id: str) -> dict:
     repo = request.app.state.document_repo
-    store = request.app.state.vector_store
     repo.delete(document_id)
     # TODO: await store.delete_document(document_id) once vector deletion lands.
     return {"deleted": document_id}

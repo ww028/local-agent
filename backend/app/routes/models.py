@@ -1,17 +1,19 @@
-"""Model listing and selection."""
+"""Discover installed models without automatically pulling weights."""
 
-from __future__ import annotations
+from fastapi import APIRouter, Request
 
-from fastapi import APIRouter, Depends
-
-from app.config import Settings, get_settings
+from app.ollama_client import ModelError
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
 
 @router.get("")
-def list_models(settings: Settings = Depends(get_settings)) -> dict:
-    return {
-        "llm": settings.llm_model,
-        "embedding": settings.embedding_model,
-    }
+async def list_models(request: Request) -> dict:
+    state = request.app.state
+    try:
+        installed = await state.chat_model.list_models()
+        return {"llm": state.settings.llm_model, "embedding": state.settings.embedding_model,
+                "available": installed, "status": "ready"}
+    except ModelError as exc:
+        return {"llm": state.settings.llm_model, "embedding": state.settings.embedding_model,
+                "available": [], "status": "unavailable", "error": str(exc)}

@@ -1,59 +1,55 @@
 import type { StreamEvent } from "./types";
+import { responseError } from "./client";
 
-/**
- * Post a chat request and consume the SSE stream.
- * Callbacks are invoked as events arrive.
- */
-export async function streamChat(
-  body: { message: string; use_knowledge_base: boolean; conversation_id?: string | null },
-  handlers: {
-    onToken: (text: string) => void;
-    onCitations: (citations: NonNullable<StreamEvent["citations"]>) => void;
-    onDone: () => void;
-    onError: (message: string) => void;
-  },
+/** Incremental UTF-8 SSE reader with cancellation, CRLF and EOF validation. */
+export async function consumeSSE(
+  stream: ReadableStream<Uint8Array>, onEvent: (event: StreamEvent) => void,
 ): Promise<void> {
-  const res = await fetch("/api/chats/stream", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok || !res.body) {
-    handlers.onError(`Request failed: ${res.status}`);
-    return;
-  }
-
-  const reader = res.body.getReader();
+  const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    const frames = buffer.split("\n\n");
-    buffer = frames.pop() ?? "";
-
-    for (const frame of frames) {
-      const line = frame.trim();
-      if (!line.startsWith("data:")) continue;
-      const event: StreamEvent = JSON.parse(line.slice(5).trim());
-      switch (event.type) {
-        case "token":
-          if (event.content) handlers.onToken(event.content);
-          break;
-        case "citation":
-          if (event.citations) handlers.onCitations(event.citations);
-          break;
-        case "error":
-          handlers.onError(event.error ?? "Unknown error");
-          break;
-        case "done":
-          handlers.onDone();
-          break;
+  let terminal = false;
+  const parse = (frame: string) => {
+    const data = frame.split(/\r?\n/).filter(line => line.startsWith("data:"))
+      .map(line => line.slice(5).trimStart()).join("\n");
+    if (!data) return;
+    const event = JSON.parse(data) as StreamEvent;
+    if (!["meta", "token", "citation", "error", "done"].includes(event.type)) {
+      throw new Error("Invalid stream event.");
+    }
+    terminal ||= event.type === "done" || event.type === "error";
+    onEvent(event);
+  };
+  try {
+    while (!terminal) {
+      const { value, done } = await reader.read();
+      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+      let boundary: RegExpExecArray | null;
+      while ((boundary = /\r?\n\r?\n/.exec(buffer))) {
+        parse(buffer.slice(0, boundary.index));
+        buffer = buffer.slice(boundary.index + boundary[0].length);
+        if (terminal) break;
+      }
+      if (done) {
+        if (buffer.trim() && !terminal) parse(buffer);
+        break;
       }
     }
+    if (!terminal) throw new Error("Connection ended before generation completed.");
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
+}
+export async function streamChat(
+  body: { message: string; model: string; conversation_id?: string | null },
+  onEvent: (event: StreamEvent) => void, signal: AbortSignal,
+): Promise<void> {
+  const response = await fetch("/api/chats/stream", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...body, use_knowledge_base: false }), signal,
+  });
+  if (!response.ok) throw new Error(await responseError(response));
+  if (!response.body) throw new Error("Streaming is unavailable.");
+  await consumeSSE(response.body, onEvent);
 }

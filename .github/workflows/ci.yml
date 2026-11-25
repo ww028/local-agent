@@ -15,7 +15,9 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         working-directory: backend
-        run: pip install -r requirements-dev.txt
+        run: pip install --index-url https://pypi.org/simple -r requirements-dev.txt
+      - name: Public-source guard
+        run: python scripts/check-public.py
       - name: Lint
         working-directory: backend
         run: ruff check app
@@ -32,7 +34,10 @@ jobs:
           node-version: "22"
       - name: Install dependencies
         working-directory: frontend
-        run: npm install
+        run: npm ci --registry=https://registry.npmjs.org --ignore-scripts --no-audit --no-fund
+      - name: Test SSE client
+        working-directory: frontend
+        run: npm test
       - name: Build
         working-directory: frontend
         run: npm run build

@@ -1,25 +1,15 @@
 #!/usr/bin/env bash
-# Install backend and frontend dependencies. Models are pulled separately
-# via scripts/pull-models.sh.
+# Public package sources only. Does not install Ollama or download model weights.
 set -euo pipefail
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
-echo "==> Checking prerequisites"
-command -v python3 >/dev/null 2>&1 || { echo "Python 3 is required."; exit 1; }
-command -v node >/dev/null 2>&1 || { echo "Node 20+ is required."; exit 1; }
-command -v npm >/dev/null 2>&1 || { echo "npm is required."; exit 1; }
-
-echo "==> Backend: create venv and install dependencies"
-cd "$ROOT/backend"
-python3 -m venv .venv
-# shellcheck disable=SC1091
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements-dev.txt
-
-echo "==> Frontend: install dependencies"
-cd "$ROOT/frontend"
-npm install
-
-echo "==> Done. Next: bash scripts/pull-models.sh, then bash scripts/dev.sh"
+PYTHON="${PYTHON:-python3}"
+"$PYTHON" -c 'import sys; assert (3, 11) <= sys.version_info[:2] <= (3, 14), "Use Python 3.11-3.14"'
+command -v node >/dev/null
+command -v npm >/dev/null
+node -e 'if (Number(process.versions.node.split(".")[0]) < 20) process.exit(1)'
+if [[ ! -d "$ROOT/backend/.venv" ]]; then
+  "$PYTHON" -m venv "$ROOT/backend/.venv"
+fi
+"$ROOT/backend/.venv/bin/python" -m pip install --index-url https://pypi.org/simple -r "$ROOT/backend/requirements-dev.txt"
+(cd "$ROOT/frontend" && npm ci --registry=https://registry.npmjs.org --ignore-scripts --no-audit --no-fund)
+printf 'Dependencies ready. Start Ollama separately, then run bash scripts/dev.sh.\n'

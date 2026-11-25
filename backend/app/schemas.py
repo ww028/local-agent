@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -40,20 +40,23 @@ class DocumentMeta(BaseModel):
     # Reserved for future multi-tenant / ACL support. Local build treats as public.
     owner_id: str | None = None
     tenant_id: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(min_length=1, max_length=20000)
     conversation_id: str | None = None
-    use_knowledge_base: bool = True
-    model: str | None = None
-    top_k: int | None = None
+    use_knowledge_base: bool = False
+    model: str | None = Field(default=None, max_length=200)
+    top_k: int | None = Field(default=None, ge=1, le=20)
 
 
 class ChatStreamEvent(BaseModel):
-    type: Literal["token", "citation", "done", "error"]
+    type: Literal["meta", "token", "citation", "done", "error"]
+    conversation_id: str | None = None
+    message_id: int | None = None
+    model: str | None = None
     content: str | None = None
     citations: list[Citation] | None = None
     error: str | None = None

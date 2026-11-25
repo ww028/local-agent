@@ -1,46 +1,83 @@
-"""Conversation and message repository (SQLite)."""
+"""SQLite conversation repository; synchronous methods run on the API event loop."""
 
 from __future__ import annotations
 
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.schemas import ChatMessage
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 class ChatRepository:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
 
-    def create_conversation(self, title: str | None = None) -> str:
-        conversation_id = uuid.uuid4().hex
-        now = datetime.utcnow().isoformat()
-        self._conn.execute(
-            "INSERT INTO conversations (conversation_id, title, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?)",
-            (conversation_id, title, now, now),
-        )
-        self._conn.commit()
-        return conversation_id
+    def create_conversation(self, title: str = "New conversation") -> str:
+        key = uuid.uuid4().hex
+        timestamp = now()
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO conversations VALUES (?, ?, ?, ?)",
+                (key, title, timestamp, timestamp),
+            )
+        return key
 
-    def add_message(self, conversation_id: str, message: ChatMessage) -> None:
-        now = datetime.utcnow().isoformat()
-        self._conn.execute(
-            "INSERT INTO messages (conversation_id, role, content, created_at) "
-            "VALUES (?, ?, ?, ?)",
-            (conversation_id, message.role, message.content, now),
-        )
-        self._conn.execute(
-            "UPDATE conversations SET updated_at = ? WHERE conversation_id = ?",
-            (now, conversation_id),
-        )
-        self._conn.commit()
+    def get(self, key: str) -> dict | None:
+        row = self._conn.execute(
+            "SELECT * FROM conversations WHERE conversation_id = ?", (key,)
+        ).fetchone()
+        return dict(row) if row else None
 
-    def history(self, conversation_id: str, limit: int = 20) -> list[ChatMessage]:
-        rows = self._conn.execute(
-            "SELECT role, content FROM messages WHERE conversation_id = ? "
-            "ORDER BY id DESC LIMIT ?",
-            (conversation_id, limit),
-        ).fetchall()
-        return [ChatMessage(role=row["role"], content=row["content"]) for row in reversed(rows)]
+    def list_all(self) -> list[dict]:
+        return [dict(row) for row in self._conn.execute(
+            "SELECT * FROM conversations ORDER BY updated_at DESC"
+        )]
+
+    def messages(self, key: str) -> list[dict]:
+        return [dict(row) for row in self._conn.execute(
+            "SELECT * FROM messages WHERE conversation_id = ? ORDER BY id", (key,)
+        )]
+
+    def delete(self, key: str) -> None:
+        with self._conn:
+            self._conn.execute("DELETE FROM conversations WHERE conversation_id = ?", (key,))
+
+    def start_turn(self, key: str, text: str, model: str) -> int:
+        timestamp = now()
+        with self._conn:
+            self._conn.execute(
+                "INSERT INTO messages (conversation_id, role, content, created_at, status, model) "
+                "VALUES (?, 'user', ?, ?, 'complete', ?)", (key, text, timestamp, model),
+            )
+            cursor = self._conn.execute(
+                "INSERT INTO messages (conversation_id, role, content, created_at, status, model) "
+                "VALUES (?, 'assistant', '', ?, 'generating', ?)", (key, timestamp, model),
+            )
+            self._conn.execute("UPDATE conversations SET updated_at = ? WHERE conversation_id = ?",
+                               (timestamp, key))
+        return int(cursor.lastrowid)
+
+    def finish(self, message_id: int, text: str, status: str, error: str | None = None) -> None:
+        with self._conn:
+            self._conn.execute(
+                "UPDATE messages SET content = ?, status = ?, error = ? WHERE id = ?",
+                (text, status, error, message_id),
+            )
+
+    def history(self, key: str) -> list[ChatMessage]:
+        # Only completed user/assistant pairs enter future prompts. A failed or
+        # cancelled assistant reply remains visible, but is not model context.
+        rows = self.messages(key)
+        result: list[ChatMessage] = []
+        for i in range(0, len(rows) - 1, 2):
+            user, assistant = rows[i:i + 2]
+            if (user["role"] == "user" and assistant["role"] == "assistant"
+                    and assistant["status"] == "complete"):
+                result.extend([ChatMessage(role="user", content=user["content"]),
+                               ChatMessage(role="assistant", content=assistant["content"])])
+        return result

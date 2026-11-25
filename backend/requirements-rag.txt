@@ -1,0 +1,5 @@
+# Optional ingestion dependencies; phase 1 does not import or install them.
+-r requirements.txt
+lancedb>=0.20,<1.0
+mistune>=3.0,<4.0
+python-frontmatter>=1.0,<2.0

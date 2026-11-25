@@ -6,9 +6,11 @@
 - [x] React + Vite skeleton with chat and documents pages.
 
 ## Phase 1 — Chat loop
-- [ ] Wire Ollama chat streaming end to end.
-- [ ] Model selection endpoint and UI control.
-- [ ] Conversation persistence in SQLite.
+- [x] Wire Ollama chat streaming, cancellation and errors end to end (fake-model tests).
+- [x] Installed model discovery, local capability checks and UI selection.
+- [x] Conversation persistence, restore and delete in SQLite.
+- [x] Real Ollama inference, short-sample performance and browser chat/cancel/history acceptance.
+- [ ] Physical network-disconnect acceptance and long-context/peak-memory profiling.
 
 ## Phase 2 — Ingestion pipeline
 - [ ] Markdown parse → structural chunk → embed → LanceDB index.

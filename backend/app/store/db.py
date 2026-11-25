@@ -54,5 +54,17 @@ def get_connection(settings: Settings) -> sqlite3.Connection:
     conn = sqlite3.connect(settings.db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
     conn.executescript(SCHEMA)
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+    for name, declaration in {
+        "status": "TEXT NOT NULL DEFAULT 'complete'",
+        "model": "TEXT",
+        "error": "TEXT",
+    }.items():
+        if name not in columns:
+            conn.execute(f"ALTER TABLE messages ADD COLUMN {name} {declaration}")
+    conn.execute("UPDATE messages SET status = 'interrupted' WHERE status = 'generating'")
+    conn.commit()
     return conn
