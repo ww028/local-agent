@@ -11,6 +11,7 @@ export default function ChatPage() {
   const [active, setActive] = useState<string | null>(null);
   const [models, setModels] = useState<ModelList | null>(null);
   const [model, setModel] = useState("");
+  const [knowledge, setKnowledge] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const controller = useRef<AbortController | null>(null);
@@ -68,11 +69,13 @@ export default function ChatPage() {
     const update = (fn: (message: SavedMessage) => SavedMessage) =>
       setMessages(previous => previous.map(m => m.id === assistantId ? fn(m) : m));
     try {
-      await streamChat({ message: text, model, conversation_id: key }, event => {
+      await streamChat({ message: text, model, conversation_id: key, use_knowledge_base: knowledge }, event => {
         if (event.type === "meta" && event.conversation_id) {
           key = event.conversation_id; setActive(key);
         } else if (event.type === "token") {
           update(m => ({ ...m, content: m.content + (event.content ?? "") }));
+        } else if (event.type === "citation") {
+          update(m => ({ ...m, citations: event.citations ?? [] }));
         } else if (event.type === "done") {
           update(m => ({ ...m, status: "complete" }));
         } else if (event.type === "error") {
@@ -112,12 +115,13 @@ export default function ChatPage() {
           {models?.available.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
         </select></label>
         <button disabled={busy} onClick={() => void refreshModels().catch(e => setError(e.message))}>刷新</button>
-        <span className="badge">本地 · 纯聊天</span>
+        <label><input type="checkbox" disabled={busy} checked={knowledge} onChange={e=>setKnowledge(e.target.checked)} /> 知识库问答</label>
+        <span className="badge">本地 · {knowledge?"引用资料":"自由对话"}</span>
       </header>
       {models?.status === "unavailable" && <p role="alert" className="error">{models.error}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       <div className="messages" aria-live="polite">
-        {!messages.length && <div className="empty"><h2>local-agent</h2><p>对话保存在本机。先启动 Ollama 并选择已下载的聊天模型。</p><p>知识库检索将在后续阶段开放。</p></div>}
+        {!messages.length && <div className="empty"><h2>local-agent</h2><p>对话保存在本机。先启动 Ollama 并选择已下载的聊天模型。</p><p>开启知识库问答后，会基于已导入资料生成引用回答。</p></div>}
         {messages.map(message => <MessageBubble key={message.id} message={message} />)}
         <div ref={end} />
       </div>

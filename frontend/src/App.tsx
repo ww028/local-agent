@@ -1,5 +1,6 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import ChatPage from "./pages/ChatPage";
+import DocumentsPage from "./pages/DocumentsPage";
 
 export default function App() {
   return (
@@ -16,7 +17,7 @@ export default function App() {
       <main className="content">
         <Routes>
           <Route path="/" element={<ChatPage />} />
-          <Route path="/documents" element={<div><h2>知识库</h2><p>阶段 2 将开放 Markdown 导入与索引；当前请使用纯聊天。</p></div>} />
+          <Route path="/documents" element={<DocumentsPage />} />
         </Routes>
       </main>
     </div>

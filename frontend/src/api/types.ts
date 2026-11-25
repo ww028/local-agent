@@ -33,11 +33,22 @@ export interface SavedMessage {
   status: string;
   model?: string;
   error?: string;
+  citations?: Citation[];
 }
 export interface DocumentMeta {
   document_id: string;
   title: string;
   source_path?: string | null;
+  status: string;
+  error?: string | null;
+  indexed_chunks: number;
+  chunk_count: number;
+  byte_size: number;
   created_at: string;
   updated_at: string;
+}
+export interface DocumentPreview {
+  document: DocumentMeta;
+  content: string;
+  chunks: { chunk_id: string; heading: string; text: string; start_line: number; end_line: number }[];
 }

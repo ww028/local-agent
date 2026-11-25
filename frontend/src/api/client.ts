@@ -1,4 +1,4 @@
-import type { Conversation, DocumentMeta, ModelList, SavedMessage } from "./types";
+import type { Conversation, DocumentMeta, DocumentPreview, ModelList, SavedMessage } from "./types";
 
 export async function responseError(res: Response): Promise<string> {
   try {
@@ -29,6 +29,12 @@ export async function uploadDocument(file: File): Promise<{ document_id: string 
   const form = new FormData();
   form.append("file", file);
   return parseJson(await fetch("/api/documents", { method: "POST", body: form }));
+}
+export async function getDocument(id: string): Promise<DocumentPreview> {
+  return parseJson(await fetch(`/api/documents/${encodeURIComponent(id)}`));
+}
+export async function reindexDocument(id: string): Promise<void> {
+  await parseJson(await fetch(`/api/documents/${encodeURIComponent(id)}/reindex`, { method: "POST" }));
 }
 export async function deleteDocument(id: string): Promise<void> {
   await parseJson(await fetch(`/api/documents/${encodeURIComponent(id)}`, { method: "DELETE" }));

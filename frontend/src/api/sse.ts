@@ -42,12 +42,12 @@ export async function consumeSSE(
   }
 }
 export async function streamChat(
-  body: { message: string; model: string; conversation_id?: string | null },
+  body: { message: string; model: string; conversation_id?: string | null; use_knowledge_base?: boolean },
   onEvent: (event: StreamEvent) => void, signal: AbortSignal,
 ): Promise<void> {
   const response = await fetch("/api/chats/stream", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...body, use_knowledge_base: false }), signal,
+    body: JSON.stringify(body), signal,
   });
   if (!response.ok) throw new Error(await responseError(response));
   if (!response.body) throw new Error("Streaming is unavailable.");

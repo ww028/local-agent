@@ -32,5 +32,21 @@ select { max-width: 300px; border: 1px solid #d7deea; border-radius: 6px; paddin
 .composer { display: flex; gap: 10px; padding-top: 12px; }
 .composer textarea { flex: 1; min-width: 0; resize: vertical; border: 1px solid #d7deea; border-radius: 8px; padding: 10px; }
 .error { color: #b13434; font-size: 13px; }
+.knowledge-page { height: 100%; display: flex; flex-direction: column; }
+.knowledge-page header p { color: #79859a; }
+.knowledge-layout { display: flex; gap: 20px; flex: 1; min-height: 0; }
+.document-list { width: 300px; overflow: auto; }
+.upload-zone { display: block; padding: 20px; background: #edf2ff; border: 1px dashed #90a8f1; border-radius: 10px; }
+.upload-zone input { display: block; width: 100%; margin-top: 10px; }
+.document-item { background: white; border: 1px solid #e1e7f0; border-radius: 10px; margin: 12px 0; padding: 12px; }
+.document-item>button { border: 0; font-weight: 600; text-align: left; }
+.document-preview { flex: 1; min-width: 0; overflow: auto; padding: 20px; background: white; border-radius: 10px; }
+.source-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; }
+.source-chunk { padding: 12px 0; border-bottom: 1px solid #e1e7f0; }
+.source-chunk.highlighted { background: #fff4ce; padding: 12px; }
+.citation-list { margin-top: 12px; padding: 10px; border: 1px solid #d7deea; border-radius: 8px; }
+.citation-list p { font-size: 12px; max-height: 140px; overflow: auto; }
+.badge.ready { color: #188354; }
+@media(max-width:700px) { .knowledge-layout { flex-direction: column; overflow:auto; } .document-list { width:auto; flex-shrink:0; max-height:240px; } }
 @media (max-width: 900px) { .sidebar { width: 100px; } .history { width: 140px; } .content { padding: 6px; } .chat { padding: 10px; } }
 @media (max-width: 600px) { .layout { flex-direction: column; } .sidebar { width: auto; padding: 8px; } .brand { display: none; } .sidebar nav { display: flex; } .content { min-height: 0; } .history { width: 100px; } }
