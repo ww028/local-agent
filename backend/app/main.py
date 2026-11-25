@@ -6,6 +6,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.agent.executor import Executor
+from app.agent.toolbox import Tools
 from app.config import Settings, get_settings
 from app.knowledge import KnowledgeService
 from app.ollama_client import OllamaChatModel, OllamaEmbeddingModel
@@ -13,6 +15,7 @@ from app.routes import chats, documents, models
 from app.store.chats import ChatRepository
 from app.store.db import get_connection
 from app.store.documents import DocumentRepository
+from app.store.runs import RunRepository
 from app.store.vector_store import LanceDBStore
 
 
@@ -30,6 +33,8 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
         app.state.knowledge = KnowledgeService(config, DocumentRepository(conn), LanceDBStore(config),
                                                OllamaEmbeddingModel(config))
         await app.state.knowledge.start()
+        app.state.runs = RunRepository(conn)
+        app.state.agent = Executor(app.state.chat_model,Tools(app.state.knowledge),app.state.runs)
         try:
             yield
         finally:
@@ -63,6 +68,14 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
     app.include_router(models.router)
     app.include_router(chats.router)
     app.include_router(documents.router)
+
+    @app.get("/api/runs/{key}")
+    async def run_detail(key: str, request: Request):
+        from fastapi import HTTPException
+        result=request.app.state.runs.get(key)
+        if not result:
+            raise HTTPException(404,"Run not found")
+        return result
 
     @app.get("/health")
     async def health() -> dict:

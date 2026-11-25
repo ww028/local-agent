@@ -78,6 +78,16 @@ def get_connection(settings: Settings) -> sqlite3.Connection:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
     conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_id UNINDEXED, terms)")
     conn.execute("UPDATE documents SET status = 'pending' WHERE status = 'indexing'")
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS runs (run_id TEXT PRIMARY KEY, conversation_id TEXT,
+      message_id INTEGER, status TEXT, model TEXT, created_at TEXT, updated_at TEXT);
+    CREATE TABLE IF NOT EXISTS run_events (run_id TEXT, seq INTEGER, kind TEXT, data TEXT,
+      created_at TEXT, PRIMARY KEY(run_id,seq));
+    """)
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+    if "run_id" not in columns:
+        conn.execute("ALTER TABLE messages ADD COLUMN run_id TEXT")
+    conn.execute("UPDATE runs SET status='interrupted' WHERE status='running'")
     conn.execute("UPDATE messages SET status = 'interrupted' WHERE status = 'generating'")
     conn.commit()
     return conn

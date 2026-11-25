@@ -48,12 +48,15 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=20000)
     conversation_id: str | None = None
     use_knowledge_base: bool = False
+    mode: Literal["chat", "knowledge", "agent"] = "chat"
     model: str | None = Field(default=None, max_length=200)
     top_k: int | None = Field(default=None, ge=1, le=20)
 
 
 class ChatStreamEvent(BaseModel):
-    type: Literal["meta", "token", "citation", "done", "error"]
+    type: Literal["meta", "token", "citation", "step", "done", "error"]
+    run_id: str | None = None
+    event: dict | None = None
     conversation_id: str | None = None
     message_id: int | None = None
     model: str | None = None

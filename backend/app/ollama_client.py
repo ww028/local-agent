@@ -62,6 +62,17 @@ class OllamaChatModel:
         except (ValueError, TypeError) as exc:
             raise ModelError("Invalid model metadata from Ollama.") from exc
 
+    async def tool_chat(self, messages: list[dict], *, model: str, tools: list[dict]) -> dict:
+        try:
+            async with self._client() as client:
+                response = await client.post("/api/chat",json={"model":model,"messages":messages,
+                    "tools":tools,"think":False,"stream":False,
+                    "options":{"num_ctx":self._settings.num_ctx,"num_predict":self._settings.num_predict}})
+                response.raise_for_status()
+                return response.json()["message"]
+        except (httpx.HTTPError,KeyError,ValueError) as exc:
+            raise ModelError("Local tool-calling request failed") from exc
+
     async def achat(
         self, messages: Sequence[ChatMessage], *, model: str, stream: bool = True,
         num_ctx: int | None = None, temperature: float | None = None,
