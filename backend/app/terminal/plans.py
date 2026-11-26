@@ -200,25 +200,190 @@ def read_only_invocation(name, args):
     return False
 
 
+# Read-only filters: they only transform/print data. Validators below block the few flags that write.
+READ_TOOLS = {
+    "grep",
+    "egrep",
+    "fgrep",
+    "cat",
+    "head",
+    "tail",
+    "wc",
+    "sort",
+    "uniq",
+    "cut",
+    "tr",
+    "find",
+    "which",
+    "echo",
+    "printf",
+    "basename",
+    "dirname",
+    "file",
+    "stat",
+    "strings",
+    "jq",
+    "ps",
+    "ls",
+    "launchctl",
+}
+ALLOWED_REDIRECTS = re.compile(r"(?:[012]?>(?:>|&)?\s*/dev/null|[012]?>&\s*1)")
+FORBIDDEN_SEGMENTS = {
+    "sudo",
+    "doas",
+    "eval",
+    "exec",
+    "source",
+    ".",
+    "xargs",
+    "tee",
+    "sh",
+    "bash",
+    "zsh",
+    "rm",
+    "mv",
+    "cp",
+    "dd",
+    "mkdir",
+    "touch",
+    "ln",
+    "chmod",
+    "chown",
+    "kill",
+    "pkill",
+    "brew",
+    "pip",
+    "npm",
+    "open",
+    "curl",
+    "wget",
+    "nc",
+    "ssh",
+    "scp",
+    "rsync",
+}
+
+
+def _read_tool_args(name, args):
+    if name in {"grep", "egrep", "fgrep", "cat", "head", "tail", "wc", "cut", "tr", "echo"}:
+        return True
+    if name == "printf":
+        return True
+    if name in {"basename", "dirname", "file", "stat", "strings", "jq", "ps", "which"}:
+        return True
+    if name == "sort":
+        return not any(a.startswith("-o") or a.startswith("--output") for a in args)
+    if name == "uniq":
+        return len([a for a in args if not a.startswith("-")]) <= 1
+    if name == "find":
+        banned = (
+            "-delete",
+            "-exec",
+            "-execdir",
+            "-ok",
+            "-okdir",
+            "-fprint",
+            "-fprint0",
+            "-fls",
+            "-fprintf",
+        )
+        return not any(a == b or a.startswith(b + "=") for a in args for b in banned)
+    if name == "launchctl":
+        return args[:1] == ["list"]
+    return False
+
+
+def _strip_quoted(text):
+    out, quote = [], None
+    for ch in text:
+        if quote:
+            if ch == quote:
+                quote = None
+            continue
+        if ch in "'\"":
+            quote = ch
+            continue
+        out.append(ch)
+    return "".join(out)
+
+
+def _shell_segments(script):
+    """Split a shell script on ; | && || newline while respecting quotes."""
+    parts, buf, quote = [], [], None
+    for ch in script:
+        if quote:
+            buf.append(ch)
+            if ch == quote:
+                quote = None
+            continue
+        if ch in "'\"":
+            quote = ch
+            buf.append(ch)
+        elif ch in "|;&\n":
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    parts.append("".join(buf))
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _segment_read_only(segment):
+    name = segment.split()[0]
+    if name in FORBIDDEN_SEGMENTS and name != "launchctl":
+        return False
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return False
+    if not tokens:
+        return True
+    program, args = tokens[0], tokens[1:]
+    resolved = shutil.which(program, path=SEARCH_PATH)
+    if not resolved or not read_only_program(resolved):
+        return False
+    base = Path(resolved).name
+    if read_only_invocation(base, args):
+        return True
+    return base in READ_TOOLS and _read_tool_args(base, args)
+
+
+def read_only_script(script):
+    """A shell script may skip confirmation only if every segment is provably read-only.
+
+    Conservative on purpose: no output redirection (except /dev/null and 2>&1), no command
+    substitution, no subshells, no background jobs, no installers or network tools.
+    """
+    clean = ALLOWED_REDIRECTS.sub("", script)
+    bare = _strip_quoted(clean)
+    if "`" in bare or "$(" in bare or "(" in bare or ")" in bare or "&" in bare.replace("&&", ""):
+        return False
+    if "<" in bare or ">" in bare:
+        return False
+    segments = _shell_segments(clean)
+    if not segments:
+        return False
+    return all(_segment_read_only(segment) for segment in segments)
+
+
+def read_only_step(step):
+    if step.get("kind") == "shell":
+        return read_only_script(step.get("script") or "")
+    if step.get("kind") != "exec":
+        return False
+    return read_only_program(step.get("executable", "")) and read_only_invocation(
+        Path(step["executable"]).name, step.get("args") or []
+    )
+
+
 def all_read_only(plan):
-    for step in plan.get("steps", []):
-        if step.get("kind") != "exec":
-            return False
-        path = Path(step.get("executable", ""))
-        if not read_only_program(path) or not read_only_invocation(
-            path.name, step.get("args") or []
-        ):
-            return False
-    return bool(plan.get("steps"))
+    steps = plan.get("steps") or []
+    return bool(steps) and all(read_only_step(step) for step in steps)
 
 
 def step_effects(step):
     """Plain-language consequences for people who do not read command syntax."""
-    if (
-        step.get("kind") == "exec"
-        and read_only_program(step.get("executable", ""))
-        and read_only_invocation(Path(step["executable"]).name, step.get("args") or [])
-    ):
+    if read_only_step(step):
         return ["只读取信息，不会修改文件或系统设置"]
     found = []
     text = step.get("script") or step.get("command", "")
@@ -407,6 +572,13 @@ def planning_context():
             "python3",
             "uname",
             "bash",
+            "mysql",
+            "psql",
+            "sqlite3",
+            "redis-server",
+            "mongod",
+            "docker",
+            "brew",
         )
     }
     return {
@@ -414,10 +586,54 @@ def planning_context():
         "architecture": platform.machine(),
         "python": sys.executable,
         "tools": {name: path for name, path in tools.items() if path},
+        # Where installed software actually lands, so "is X installed" searches the real dirs.
+        "path_dirs": SEARCH_PATH.split(os.pathsep),
     }
 
 
 CPU_MODEL_INTENT = re.compile("处理器|cpu|cpu型号|芯片|芯片型号", re.I)
+GREP_BRE_ALT = re.compile(r"\bgrep\s+-([A-Za-z]*)\s+(['\"])((?:[^'\"]*\|)+[^'\"]*)\2")
+
+
+def fix_grep_alternation(script):
+    r"""Turn `grep -i 'a\|b'` (GNU BRE) into `grep -Ei 'a|b'`, which BSD grep understands."""
+
+    def repl(match):
+        flags = match.group(1)
+        if "E" in flags:
+            return match.group(0)
+        quote = match.group(2)
+        pattern = match.group(3).replace("\\|", "|")
+        return "grep -E" + flags + " " + quote + pattern + quote
+
+    return GREP_BRE_ALT.sub(repl, script)
+
+
+INVENTORY_INTENT = re.compile(r"安装|装了|有啥|有哪些|都有什么|目前有|是否装|有没有装", re.I)
+
+
+def fix_inventory_scope(script):
+    """An `ls <dirs> | grep ...` inventory must cover the real install dirs, not a guess."""
+    parts = script.split("|")
+    try:
+        tokens = shlex.split(parts[0].strip())
+    except ValueError:
+        return script
+    if not tokens or Path(tokens[0]).name not in {"ls", "find"} or tokens[0] == "find":
+        return script
+    given = [tok for tok in tokens[1:] if not tok.startswith("-") and Path(tok).is_dir()]
+    if not given:
+        return script
+    venv_bin = str(Path(sys.executable).parent)
+    extra = [
+        d
+        for d in SEARCH_PATH.split(os.pathsep)
+        if Path(d).is_dir() and d not in given and d != venv_bin
+    ]
+    if not extra:
+        return script
+    parts[0] = tokens[0] + " " + " ".join(given + extra)
+    return " | ".join(part.strip() for part in parts)
 
 
 def normalize_for_intent(instruction, proposal):
@@ -440,6 +656,21 @@ def normalize_for_intent(instruction, proposal):
                 }
             ]
             return args
+    if steps and all(step.get("kind") == "shell" for step in steps):
+        fixed = dict(proposal)
+        fixed["steps"] = [
+            {
+                **step,
+                "script": (
+                    fix_inventory_scope(fix_grep_alternation(step.get("script") or ""))
+                    if INVENTORY_INTENT.search(instruction)
+                    else fix_grep_alternation(step.get("script") or "")
+                ),
+            }
+            for step in steps
+        ]
+        if any(a["script"] != b.get("script") for a, b in zip(fixed["steps"], steps)):
+            return fixed
     return proposal
 
 

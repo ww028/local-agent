@@ -17,6 +17,7 @@ from app.terminal.plans import (
     detect_version_query,
     normalize_for_intent,
     planning_context,
+    read_only_step,
     verify_any,
     version_proposal,
 )
@@ -55,6 +56,9 @@ def memory_summary(plan, records):
 
 def result_digest(plan, records):
     """Short factual answer derived from known read-only outputs (not model text)."""
+    if records and all(r["exit_code"] == 1 and not (r["stdout"] or "").strip() for r in records):
+        # grep/find/lsof use exit 1 for "nothing matched"; that is an answer, not an error.
+        return "没有找到匹配项（命令退出码 1 表示没有匹配，不是执行出错）"
     if len(plan.get("steps", [])) != 1 or len(records) != 1:
         return memory_summary(plan, records)
     from pathlib import Path
@@ -247,9 +251,16 @@ class TerminalService:
                             "Provable read-only queries (e.g. uname/sw_vers/sysctl -n with known keys/pwd/ls/lsof/git status) run automatically without a click; "
                             "only steps that may write files, change system settings, install software or use the network wait for human confirmation. "
                             "Answer the asked fact with the fewest steps; never append extra exploratory commands. "
+                            "Read-only pipelines over local files (ls | grep -E, find, cat | grep, ps | grep, launchctl list) run without a click, so keep them free of redirection, subshells and writes. "
+                            "Use grep -E (or egrep) whenever you need alternation; a plain grep pattern is literal. "
+                            "Exit code 1 from grep/find/lsof means 'nothing matched', not an error: report it as a result, not a failure. "
                             "Use the exact user-requested targets. Do not add operations. Use at most 4 steps. "
                             "Do not use shell initialization or depend on secrets. Explain goal/steps in Chinese. Runtime context: "
                             + json.dumps(context, ensure_ascii=False)
+                            + ". Installed programs live in: "
+                            + " ".join((context.get("path_dirs") or [])[:8])
+                            + "; when asked what software or databases are installed, list those dirs"
+                            " in ONE read-only step such as ls <dirs> | grep -Ei '<names>'."
                             + "; working directory: "
                             + str(
                                 resolve_directory(
@@ -350,11 +361,20 @@ class TerminalService:
                     )
                     if result.get("facts"):
                         self.repo.save_facts(key, index, result["facts"])
+                    effective = result["status"]
+                    if effective != "completed" and read_only_step(step):
+                        # grep/find/lsof answer "nothing matched" with exit 1; that is a result,
+                        # not a failure, so later read-only steps keep their chance to answer.
+                        effective = "completed"
                     self.repo.finish_step(
-                        key, index, result["status"], result["exit_code"], result["error"]
+                        key,
+                        index,
+                        effective,
+                        result["exit_code"],
+                        None if effective == "completed" else result["error"],
                     )
                     step_index = None
-                    if result["status"] != "completed":
+                    if effective != "completed":
                         status, error = "failed", result["error"]
                         break
                 records = self.repo.get(key)["steps"]

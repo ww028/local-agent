@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Read-only shell scripts now run without confirmation as a matter of principle rather than a
+  per-tool whitelist: `read_only_script()` strips allowed redirects, rejects command
+  substitution, pipes, chaining and any mutating segment, then proves every segment starts
+  from a trusted absolute program with read-only arguments. Pure-read pipelines such as
+  `ls <dirs> | grep -Ei '...'`, `which a; which b`, `find` and `2>/dev/null` therefore skip the
+  approval card, while anything that could write, install or reach the network still asks.
+- Read-only steps that exit non-zero (grep/find/lsof "no match") no longer count as failures,
+  and an all-no-match plan reports "没有找到匹配项" instead of a red error line.
+- BSD `grep` alternation is normalised (`grep -i 'a\|b'` -> `grep -Ei 'a|b'`).
+- "What software/databases are installed" plans have their `ls <dirs>` scope completed with the
+  real install dirs from PATH (e.g. Homebrew's `/opt/homebrew/bin`), so MySQL is found instead
+  of reported missing.
 - Read-only terminal queries run without a confirmation click: only provable read-only
   `exec` invocations (known system programs with whitelisted arguments) are auto-approved and
   audited as `{"auto_readonly": true}`; shell, scripts, unknown programs and anything that may

@@ -306,3 +306,69 @@ def test_version_query_fast_path_and_digest(tmp_path):
     assert plan["auto_run"] is True
     records = [{"exit_code": 0, "stdout": "v24.14.1\n", "stderr": ""}]
     assert result_digest(plan, records) == "Node.js 版本：24.14.1"
+
+
+def test_read_only_shell_pipelines_skip_confirmation(tmp_path):
+    from app.terminal.plans import read_only_script
+
+    allowed = [
+        "/bin/ls /Applications /usr/local/bin | grep -E 'mysql|postgres'",
+        "which mysql; which psql 2>/dev/null",
+        "find /usr/local -maxdepth 2 -name '*.db'",
+        "ps aux | grep -i mysql",
+        "launchctl list | grep mysql",
+        "ls /Applications 2>&1 | head -20",
+    ]
+    refused = [
+        "echo hi > /tmp/x",
+        "find . -name x -delete",
+        "curl -s http://example.com",
+        "rm -rf /tmp/x",
+        "sort in.txt -o out.txt",
+        "sudo ls",
+        "ls $(pwd)",
+        "brew list",
+        "echo hi &",
+    ]
+    assert all(read_only_script(s) for s in allowed)
+    assert not any(read_only_script(s) for s in refused)
+    plan = build_generated(
+        tmp_path,
+        ".",
+        {
+            "goal": "查数据库",
+            "steps": [{"kind": "shell", "script": allowed[0], "description": "列出数据库相关"}],
+        },
+    )
+    assert plan["auto_run"] is True
+    assert plan["effects"] == ["只读取信息，不会修改文件或系统设置"]
+
+
+def test_grep_alternation_and_no_match_digest(tmp_path):
+    from app.terminal.plans import fix_grep_alternation, normalize_for_intent
+    from app.terminal.service import result_digest
+
+    script = "ls /opt/homebrew/bin | grep -i 'mysql\\|redis'"
+    fixed = fix_grep_alternation(script)
+    assert fixed == "ls /opt/homebrew/bin | grep -Ei 'mysql|redis'"
+    proposal = normalize_for_intent(
+        "查数据库",
+        {"goal": "x", "steps": [{"kind": "shell", "script": script, "description": "x"}]},
+    )
+    assert proposal["steps"][0]["script"] == fixed
+    plan = build_generated(tmp_path, ".", proposal)
+    assert result_digest(plan, [{"exit_code": 1, "stdout": "", "stderr": ""}]).startswith(
+        "没有找到匹配项"
+    )
+
+
+def test_inventory_scope_covers_real_install_dirs(tmp_path):
+    from app.terminal.plans import normalize_for_intent
+
+    script = "/bin/ls /Applications /usr/local/bin | grep -Ei 'mysql|redis'"
+    proposal = {"goal": "x", "steps": [{"kind": "shell", "script": script, "description": "x"}]}
+    scoped = normalize_for_intent("我的电脑上目前有啥数据库啊", proposal)["steps"][0]["script"]
+    assert scoped.startswith("/bin/ls /Applications /usr/local/bin ")
+    assert "/opt/homebrew/bin" in scoped
+    plain = normalize_for_intent("列出目录", proposal)["steps"][0]["script"]
+    assert plain == script

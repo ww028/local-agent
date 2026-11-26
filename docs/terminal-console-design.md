@@ -104,3 +104,36 @@
   `--version` 计划，不经过模型、不产生 `which` 中继步骤；解析不到就明确说“PATH 里
   没有找到 node”，而不是留一个失败的 which。结果摘要固定为“Node.js 版本：24.14.1”。
 - 失败文案改为“<程序> 退出码 N：<stderr 首行>；后续步骤未执行”，让人知道为什么。
+
+### 脚本级只读证明与清单查询范围（2026-11-26 追加）
+
+- 现象：`ls /Applications /usr/local/bin | grep -i 'mysql\|redis'` 这类纯读命令仍弹确认
+  （旧逻辑把所有 `kind=shell` 一律当“写”）；确认后 `grep` 无匹配退出码 1，又被判成
+  “命令退出码非零”，界面只剩失败文案。用户因此质疑“只读为什么还要确认、为什么像
+  打补丁一样一个个加白名单”。
+- **原则取代白名单**：新增 `read_only_script(script)`——先剔除允许的重定向
+  （`2>/dev/null`、`>/dev/null`、`2>&1`、`&>/dev/null`），再拒绝反引号、`$(`、括号、
+  残留的 `&`/`<`/`>`；按未引号区的 `| ; & 换行` 切段；每段首程序须在 `SEARCH_PATH`
+  里解析到系统目录或用户工具链目录，参数走 `read_only_invocation()` 或 `READ_TOOLS`
+  专用校验（grep/cat/head/tail/wc/cut/tr/echo/printf/basename/dirname/file/stat/
+  strings/jq/ps/ls/which/launchctl 等；sort 禁 `-o`、uniq 位置参数 ≤1、find 禁
+  `-delete/-exec/-fprint*`、launchctl 只允许 `list`）。`sudo/eval/xargs/sh/rm/mv/cp/
+  dd/mkdir/touch/ln/chmod/kill/brew/pip/npm/open/curl/ssh/rsync` 等任一段出现即拒。
+  于是 `a | b`、`a; b`、`2>/dev/null` 组合的纯读脚本一次性全部免确认，新增只读工具
+  不必再改白名单，只要它在 `READ_TOOLS` 里或参数通过通用校验。
+- **只读步骤非零不算失败**：`grep`/`find`/`lsof` 退出码 1 表示“无匹配”，执行循环把
+  只读步骤的非零当 `completed` 继续，不再阻断后续步骤。
+- **无匹配固定结论**：全部步骤 `exit_code==1` 且 stdout 为空时，结果卡写
+  “没有找到匹配项（命令退出码 1 表示没有匹配，不是执行出错）”。
+- **grep 交替修正**：BSD grep 不认 GNU `\|`，`fix_grep_alternation()` 把
+  `grep -i 'a\|b'` 归一为 `grep -Ei 'a|b'`。
+- **清单查询必须搜真实安装目录**：模型只猜 `/Applications`、`/usr/local/bin`，而 MySQL
+  实际装在 `/opt/homebrew/bin`，结论误报“没有”。因此问“装了哪些软件/数据库/工具”时，
+  `fix_inventory_scope()` 把 `ls <dirs> | grep ...` 的目录补全为 `SEARCH_PATH` 里真实存在
+  的目录（去重、跳过工作台自身 venv），免确认规则不变；非清单类 `ls` 不动。
+- 规划上下文新增 `path_dirs`，并在提示里写明“已安装程序在这些目录、清单类问题用一条
+  只读 `ls <dirs> | grep -Ei` 步骤”。
+
+验收：问“我的电脑上目前有啥数据库啊”自动执行（无确认卡），一条只读管道覆盖
+`/opt/homebrew/bin`，结果给出 `mysql`、`sqlite3`；`ls | grep` 无匹配时给“没有找到匹配项”
+而不是失败红字。后端 99 项用例通过。
