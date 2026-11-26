@@ -60,6 +60,15 @@ computer and backend process must remain running: there is no login item,
 system daemon, distributed queue or high-availability deployment. Run only one
 backend worker/instance per database. See [background-jobs-design.md](background-jobs-design.md).
 
+## Confirmed AI terminal (planned in this batch)
+
+A separate persisted terminal task moves from model planning to awaiting confirmation.
+A backend-owned command catalog creates immutable executable/argv/cwd plans; a hash
+binds the user's confirmation to the exact version. A separate command worker executes
+only approved catalog steps with bounded output/time and no shell. Model planning and
+summary share the existing model lock; waiting for approval does not hold it. No arbitrary
+commands, scripts, network or writes in the initial scope. See [ai-terminal-design.md](ai-terminal-design.md).
+
 ## SQLite records
 
 - `documents` / `chunks` / FTS5: uploaded metadata, chunk text and keyword index.

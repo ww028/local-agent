@@ -37,6 +37,12 @@
 - [x] Explicit opt-in local TCP port/system read-only diagnostics.
 - [x] Real model job + browser-refresh acceptance and regression tests.
 
+## Phase 7 — Confirmed AI terminal
+- [ ] Immutable catalog plans, directory checks and explicit hash-bound confirmation.
+- [ ] Persistent execution/output, cancellation, expiry and restart interruption.
+- [ ] Natural-language terminal UI, plan review and separate facts/model summary.
+- [ ] Real local model/command acceptance and regression tests.
+
 ## Phase 5 — Agent & extensions
 - [x] Tool registration and bounded model → tool → observation loop.
 - [x] Durable execution records, source cards and inspection UI.

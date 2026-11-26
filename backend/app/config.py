@@ -28,15 +28,22 @@ class Settings(BaseSettings):
     lancedb_dir: Path = Path("data/lancedb")
     chunk_size: int = Field(default=600, ge=1)
     chunk_overlap: int = Field(default=120, ge=0)
+    terminal_workspace: Path = ROOT
     top_k: int = Field(default=6, ge=1, le=20)
 
     @field_validator("ollama_base_url")
     @classmethod
     def local_url(cls, value: str) -> str:
         url = urlparse(value)
-        if (url.scheme != "http" or url.hostname not in {"localhost", "127.0.0.1", "::1"}
-                or url.username or url.password or url.query or url.fragment
-                or url.path not in {"", "/"}):
+        if (
+            url.scheme != "http"
+            or url.hostname not in {"localhost", "127.0.0.1", "::1"}
+            or url.username
+            or url.password
+            or url.query
+            or url.fragment
+            or url.path not in {"", "/"}
+        ):
             raise ValueError("Ollama must use an HTTP loopback URL without credentials.")
         return value.rstrip("/")
 
@@ -51,6 +58,14 @@ class Settings(BaseSettings):
     @classmethod
     def resolve_path(cls, value: Path) -> Path:
         return value if value.is_absolute() else ROOT / value
+
+    @field_validator("terminal_workspace")
+    @classmethod
+    def terminal_root(cls, value: Path) -> Path:
+        value = value if value.is_absolute() else ROOT / value
+        from app.terminal.catalog import workspace_path
+
+        return workspace_path(value)
 
     @model_validator(mode="after")
     def budgets(self) -> "Settings":

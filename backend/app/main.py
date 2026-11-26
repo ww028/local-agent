@@ -15,13 +15,15 @@ from app.config import Settings, get_settings
 from app.jobs import JobService
 from app.knowledge import KnowledgeService
 from app.ollama_client import OllamaChatModel, OllamaEmbeddingModel
-from app.routes import chats, documents, jobs, models
+from app.routes import chats, documents, jobs, models, terminal
 from app.store.chats import ChatRepository
 from app.store.db import get_connection
 from app.store.documents import DocumentRepository
 from app.store.jobs import JobRepository
 from app.store.runs import RunRepository
+from app.store.terminal import TerminalRepository
 from app.store.vector_store import LanceDBStore
+from app.terminal.service import TerminalService
 
 
 def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
@@ -43,9 +45,12 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
         app.state.agent = Executor(app.state.chat_model, Tools(app.state.knowledge), app.state.runs)
         app.state.jobs = JobService(app.state, JobRepository(conn))
         await app.state.jobs.start()
+        app.state.terminal = TerminalService(app.state, TerminalRepository(conn))
+        await app.state.terminal.start()
         try:
             yield
         finally:
+            await app.state.terminal.stop()
             await app.state.jobs.stop()
             await app.state.knowledge.stop()
             conn.close()
@@ -82,6 +87,7 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
     app.include_router(chats.router)
     app.include_router(documents.router)
     app.include_router(jobs.router)
+    app.include_router(terminal.router)
 
     @app.get("/api/runs")
     async def list_runs(request: Request):
@@ -109,7 +115,7 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
 
         @app.get("/{route:path}", include_in_schema=False)
         async def web(route: str):
-            if route not in {"", "documents", "runs", "jobs"}:
+            if route not in {"", "documents", "runs", "jobs", "terminal"}:
                 raise HTTPException(404, "Not found")
             return FileResponse(dist / "index.html")
 

@@ -106,6 +106,22 @@ def get_connection(settings: Settings) -> sqlite3.Connection:
     conn.execute(
         "UPDATE jobs SET status='interrupted', error='Backend stopped during execution; retry explicitly', finished_at=CURRENT_TIMESTAMP WHERE status IN ('running','cancelling')"
     )
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS terminal_tasks (
+      task_id TEXT PRIMARY KEY, instruction TEXT NOT NULL, model TEXT NOT NULL,
+      relative_dir TEXT NOT NULL, status TEXT NOT NULL, plan TEXT, plan_hash TEXT,
+      expires_at TEXT, confirmed_at TEXT, summary TEXT NOT NULL DEFAULT '', error TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, started_at TEXT, finished_at TEXT);
+    CREATE INDEX IF NOT EXISTS terminal_status_created ON terminal_tasks(status,created_at);
+    CREATE TABLE IF NOT EXISTS terminal_steps (
+      task_id TEXT NOT NULL, step_index INTEGER NOT NULL, status TEXT NOT NULL,
+      stdout TEXT NOT NULL DEFAULT '', stderr TEXT NOT NULL DEFAULT '', exit_code INTEGER,
+      error TEXT, started_at TEXT, finished_at TEXT, PRIMARY KEY(task_id,step_index));
+    """)
+    conn.execute(
+        "UPDATE terminal_tasks SET status='interrupted',error='Service stopped; replan and confirm again' WHERE status IN ('planning','running','cancelling')"
+    )
+    conn.execute("UPDATE terminal_steps SET status='interrupted' WHERE status='running'")
     conn.execute("UPDATE runs SET status='interrupted' WHERE status='running'")
     conn.execute("UPDATE messages SET status = 'interrupted' WHERE status = 'generating'")
     conn.commit()
