@@ -264,3 +264,8 @@ kbd { font-family:inherit; border:1px solid #c8d1e0; border-bottom-width:2px; bo
 .history-item .conversation-more:hover,.history-item .conversation-more[aria-expanded=true] {background:#e9e9e9;opacity:1;}
 @media(max-width:1000px){.console-summary,.chat-summary {width:225px;flex-basis:225px;}.sidebar {width:225px;flex-basis:225px;}.messages{padding:22px;}}
 @media(max-width:760px){.console-summary,.chat-summary{display:none;}.sidebar{width:210px;flex-basis:210px;}.layout{flex-direction:row;}.sidebar nav{overflow:visible;}.terminal-tools input{display:none;}}
+
+.question-link {display:block;width:100%;text-align:left;border:0;background:transparent;padding:9px 8px;margin:2px 0;border-radius:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;color:#444;}
+.question-link:hover{background:#f3f3f3;}
+.message-anchor {scroll-margin-top:16px;flex-shrink:0;}
+.message-anchor.user {align-self:flex-end;max-width:80%;}.message-anchor.user .bubble {max-width:100%;}

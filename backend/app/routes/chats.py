@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.chat_context import compose_chat
+from app.chat_context import compose_chat, cost
 from app.ollama_client import ModelError
 from app.schemas import ChatRequest, ChatStreamEvent
 
@@ -29,6 +29,22 @@ async def get_chat(key: str, request: Request) -> dict:
     if not conversation:
         raise HTTPException(404, "Conversation not found.")
     return {"conversation": conversation, "messages": repo.messages(key)}
+
+
+@router.get("/{key}/context")
+async def chat_context_usage(key: str, request: Request, reasoning: bool = False):
+    state = request.app.state
+    if not state.chat_repo.get(key):
+        raise HTTPException(404, "Conversation not found")
+    history = state.chat_repo.history(key)
+    output = min(4096, state.settings.num_ctx // 2) if reasoning else state.settings.num_predict
+    items = compose_chat("", history, state.settings, output_budget=output, reasoning=reasoning)
+    used = sum(cost(m.content) for m in items)
+    budget = state.settings.num_ctx - output - 512
+    return {"used": used, "budget": budget, "remaining": max(0, budget-used),
+            "output_reserved": output, "unit": "UTF-8 bytes (conservative token estimate)",
+            "included_turns": (len(items)-2)//2, "total_turns": len(history)//2,
+            "trimmed": len(items)-2 < len(history)}
 
 
 @router.delete("/{key}")

@@ -76,7 +76,7 @@ export default function TerminalPage(){
   };
   const replan=async(task:TerminalTask)=>{
     setBusy(true);
-    try{merge(await proposeTerminal(task.instruction,task.model||model,task.relative_dir||'.'));scroll(true);setNotice('');}
+    try{merge(await proposeTerminal(task.instruction,task.model||model,task.relative_dir||'.',conversationId||undefined));scroll(true);setNotice('');}
     catch(e){setNotice(e instanceof Error?e.message:'重新规划失败');}
     finally{setBusy(false);void load();}
   };
@@ -106,7 +106,7 @@ export default function TerminalPage(){
         <button type="button" className="new-row" title="开始一段新对话，上下文归零" onClick={()=>void startNew()} disabled={busy}>
           <span className="new-row-icon">＋</span><span>新对话</span>
         </button>
-        <span className="list-label">最近</span>
+        <span className="list-label">最近</span></details>
       </div>
       <div className="console-chats-list">
         {chats.map(item=><button key={item.conversation_id} type="button"
@@ -121,10 +121,10 @@ export default function TerminalPage(){
     <div className="terminal-window">
       <div className="terminal-titlebar">
         <button aria-label="新开终端对话" onClick={()=>void startNew()} disabled={busy}>✎</button><div className="work-title"><strong>{convTitle}</strong><small>本地 AI 终端 · 改动按需确认</small></div>
-        <span className="terminal-tools">
+        <details className="work-settings"><summary aria-label="终端设置">···</summary><span className="terminal-tools settings-popover">
           <select aria-label="终端模型" value={model} onChange={e=>setModel(e.target.value)}>{!model&&<option value="">无模型</option>}{models.map(m=><option key={m}>{m}</option>)}</select>
           <input aria-label="终端相对目录" maxLength={240} value={directory} onChange={e=>setDirectory(e.target.value)} placeholder="相对目录"/>
-        </span>
+        </span></details>
       </div>
       <div className="terminal-body" ref={bodyRef} onScroll={()=>{const el=bodyRef.current;if(el)stickyRef.current=el.scrollHeight-el.scrollTop-el.clientHeight<140;}}>
         {!tasks.length&&<div className="t-empty">
@@ -132,7 +132,7 @@ export default function TerminalPage(){
           <p>这是一个本地 AI 终端。用自然语言描述需求，AI 生成真实命令；只读查询直接执行，会改动文件或系统设置的才让你确认。</p>
           <p className="t-dim">例如：查看电脑内存 · 统计仓库文件数量 · 运行项目测试 · 检查 8092 端口</p>
         </div>}
-        {tasks.map(task=><TerminalEntry key={task.task_id} task={task} busy={busy} onConfirm={()=>void approve(task)} onCancel={()=>void stop(task)} onReplan={()=>void replan(task)}/>)}
+        {tasks.map(task=><div key={task.task_id} id={`terminal-${task.task_id}`}><TerminalEntry task={task} busy={busy} onConfirm={()=>void approve(task)} onCancel={()=>void stop(task)} onReplan={()=>void replan(task)}/></div>)}
         {notice&&<p className="t-fail" role="alert">{notice}</p>}
       </div>
       {waiting&&<div className="t-pending-bar">有待确认的计划：在下方输入 <kbd>y</kbd> 执行、<kbd>n</kbd> 取消，或点上方按钮</div>}
@@ -150,7 +150,7 @@ export default function TerminalPage(){
         <span>生成式命令 · 只读自动执行 · 改动才确认 · 非交互式 PTY · 计划 10 分钟有效</span>
       </footer>
     </div>
-    <aside className="console-summary"><header className="summary-heading">对话摘要</header>
+    <aside className="console-summary"><header className="summary-heading">对话摘要</header><div className="summary-block"><h3>问题目录</h3>{tasks.map((t,i)=><button key={t.task_id} className="question-link" title={t.instruction} onClick={()=>document.getElementById(`terminal-${t.task_id}`)?.scrollIntoView({behavior:"smooth",block:"start"})}>{i+1}. {t.instruction}</button>)}</div>
       <div className="summary-block">
         <h3>上下文</h3>
         {conv?<>

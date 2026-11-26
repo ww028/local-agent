@@ -14,6 +14,14 @@ export default function ChatPage() {
   const [model, setModel] = useState("");
   const [mode,setMode] = useState<"chat"|"knowledge"|"agent">("chat");
   const [reasoning,setReasoning] = useState(false);
+  const [usage,setUsage] = useState<{used:number;budget:number;remaining:number;included_turns:number;total_turns:number;trimmed:boolean}|null>(null);
+  useEffect(()=>{
+    let cancelled=false;
+    setUsage(null);
+    if(active)void fetch(`/api/chats/${active}/context?reasoning=${reasoning}`).then(r=>{if(!r.ok)throw new Error();return r.json();}).then(v=>{if(!cancelled)setUsage(v);}).catch(()=>{});
+    return()=>{cancelled=true;};
+  },[active,reasoning,messages]);
+
   const [temperature,setTemperature] = useState(0.3);
   const [steps,setSteps] = useState<{seq:number;kind:string;data:Record<string,unknown>}[]>([]);
   const [menu, setMenu] = useState<{id:string; x:number; y:number} | null>(null);
@@ -56,7 +64,7 @@ export default function ChatPage() {
     setBusy(true); setError("");
     try {
       const result = await getChat(id);
-      setActive(id); setMessages(result.messages);
+      setActive(id); setMessages(result.messages);setSteps([]);
     } catch (e) { setError(e instanceof Error ? e.message : "会话加载失败"); }
     finally { pending.current = false; setBusy(false); }
   };
@@ -155,7 +163,7 @@ export default function ChatPage() {
       {error && <p role="alert" className="error">{error}</p>}
       <div className="messages" aria-live="polite">
         {!messages.length && <div className="empty"><h2>local-agent</h2><p>对话保存在本机。先启动 Ollama 并选择已下载的聊天模型。</p><p>开启知识库问答后，会基于已导入资料生成引用回答。</p></div>}
-        {messages.map(message => <MessageBubble key={message.id} message={message} />)}
+        {messages.map(message => <div key={message.id} id={`message-${message.id}`} className={`message-anchor ${message.role}`}><MessageBubble message={message} /></div>)}
         <div ref={end} />
       </div>
       {steps.length>0 && <details open className="run-panel"><summary>执行过程 · {steps.length} 个事件</summary>{steps.map(step=><div key={step.seq}><strong>{step.kind}</strong><pre>{JSON.stringify(step.data,null,2)}</pre></div>)}</details>}
@@ -178,6 +186,8 @@ export default function ChatPage() {
       </div>
     </section>
     <aside className="console-summary chat-summary"><header className="summary-heading">对话摘要</header>
+      <div className="summary-block"><h3>问题目录</h3>{messages.filter(m=>m.role==="user").map((m,i)=><button className="question-link" key={m.id} title={m.content} onClick={()=>document.getElementById(`message-${m.id}`)?.scrollIntoView({behavior:"smooth",block:"start"})}>{i+1}. {m.content}</button>)}</div>
+      <div className="summary-block"><h3>上下文用量</h3>{usage?<><div className="summary-bar"><span style={{width:`${Math.min(100,100*usage.used/usage.budget)}%`}}/></div><p className="summary-line">{(usage.used/1024).toFixed(1)}K / {(usage.budget/1024).toFixed(1)}K · 剩余 {(usage.remaining/1024).toFixed(1)}K</p><p className="summary-sub">按 UTF-8 字节保守估算，非精确 token 数。历史 {usage.included_turns}/{usage.total_turns} 轮。</p>{usage.trimmed&&<p className="summary-sub">旧轮次已从模型输入裁剪，完整历史仍可查看。需要旧信息时请重新引用。</p>}</>:<p className="summary-sub">{active?"用量暂不可用":"新对话尚无历史"}</p>}</div>
       <div className="summary-block">
         <h3>当前对话</h3>
         <p className="summary-title">{conversations.find(c=>c.conversation_id===active)?.title || "新对话"}</p>
