@@ -60,15 +60,27 @@ execution are supported, within the Agent's six-step/eight-tool/120-second loop.
 
 ## Confirmed AI terminal V3
 
-Open **/terminal**, describe the task, review actual commands/scripts and initial cwd,
-then acknowledge account permissions and confirm. New plans are model-generated exec
-or shell steps, not selected from a fixed action enum. Supported goals can include system
-queries, project tests/builds/file operations or installation; success depends on local
-programs and model correctness. Missing executables do not trigger automatic installation.
+Open **/terminal**: a macOS-style terminal window. The upper pane is one continuous
+scrollback of requests, generated commands, output and explanations; the bottom `❯`
+input box is the conversation.
 
-Every plan needs no-sandbox/account acknowledgement. Shell/unknown code or file effects
-need high-risk review; possibly-networked operations need separate network acknowledgement.
-These acknowledgements are NOT an OS sandbox or firewall. Commands can access the current
+Type the task and press Enter → the AI generates real commands → review the command,
+directory and warnings → type `y` (or click "执行 (y)") to approve, `n` to cancel.
+`↑`/`↓` browse your local input history. While a plan awaits confirmation, other text
+is rejected with a hint instead of silently discarding the plan. Confirmations stay
+bound to the exact plan; a changed plan requires a new `y`. Recent transcript entries
+are passed to the planner as untrusted context so follow-ups like "再看看可用内存"
+work, but old approvals are never reused.
+
+New plans are model-generated exec or shell steps, not a fixed action enum. System
+queries, project tests/builds/file operations or installation can be planned; success
+depends on local programs and model correctness. Missing executables are not auto-installed.
+
+Every plan needs no-sandbox/account acknowledgement; typing `y` accepts that plus the
+high-risk (code/file) and network lines shown on screen in one explicit action. A single
+`y` is an explicit approval of what is displayed, not a blanket permission. Shell/unknown
+code or file effects and possibly-networked operations are never hidden; the prompt lists
+them before you answer. These acknowledgements are NOT an OS sandbox or firewall. Commands can access the current
 user's files/network beyond initial cwd. Do not authorize untrusted projects/scripts.
 Inference stays local, but an approved command may network. HOME/TMPDIR and public PATH
 are supplied; the entire environment/proxy/secrets are not copied.

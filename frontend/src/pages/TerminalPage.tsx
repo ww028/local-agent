@@ -1,51 +1,106 @@
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { cancelTerminal, confirmTerminal, getModels, getTerminal, listTerminal, proposeTerminal, terminalCapabilities } from "../api/client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
+import { cancelTerminal, confirmTerminal, getModels, proposeTerminal, terminalCapabilities, terminalTranscript } from "../api/client";
 import type { TerminalTask, TerminalApproval } from "../api/types";
-import TerminalDetails, { terminalLabels } from "../components/TerminalDetails";
+import TerminalEntry from "../components/TerminalEntry";
+
+const ACTIVE=['planning','queued','running','cancelling'];
+const YES=['y','yes','是','执行','确认','run'];
+const NO=['n','no','否','取消','不'];
+const ALL_ACKS:TerminalApproval={risk_acknowledged:true,high_risk_acknowledged:true,network_acknowledged:true};
 
 export default function TerminalPage(){
-  const [params,setParams]=useSearchParams();const id=params.get('id');
-  const [tasks,setTasks]=useState<TerminalTask[]>([]);const [task,setTask]=useState<TerminalTask|null>(null);
+  const [tasks,setTasks]=useState<TerminalTask[]>([]);
   const [instruction,setInstruction]=useState('');const [directory,setDirectory]=useState('.');
   const [models,setModels]=useState<string[]>([]);const [model,setModel]=useState('');
   const [caps,setCaps]=useState<Awaited<ReturnType<typeof terminalCapabilities>>|null>(null);
-  const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [offset,setOffset]=useState(0);
-  useEffect(()=>{
-    let alive=true;let inFlight=false;
-    const refresh=async()=>{
-      if(inFlight)return;inFlight=true;
-      try{const [list,detail]=await Promise.all([listTerminal(offset),id?getTerminal(id):Promise.resolve(null)]);
-        if(alive){setTasks(list.tasks);setTask(detail);setError('');}
-      }catch(e){if(alive)setError(e instanceof Error?e.message:'任务读取失败');}finally{inFlight=false;}
-    };
-    void refresh();const timer=setInterval(()=>void refresh(),1500);
-    return()=>{alive=false;clearInterval(timer);}; // No cancellation on navigation.
-  },[id,offset]);
-  useEffect(()=>{
-    let alive=true;
-    void Promise.all([getModels(),terminalCapabilities()]).then(([m,c])=>{if(!alive)return;setModels(m.available.map(x=>x.name));setModel(m.available.some(x=>x.name===m.llm)?m.llm:m.available[0]?.name||'');setCaps(c);}).catch(e=>{if(alive)setError(e.message);});
-    return()=>{alive=false;};
+  const [busy,setBusy]=useState(false);const [notice,setNotice]=useState('');
+  const [history,setHistory]=useState<string[]>([]);const [historyIndex,setHistoryIndex]=useState(-1);
+  const bodyRef=useRef<HTMLDivElement>(null);const inputRef=useRef<HTMLInputElement>(null);
+  const stickyRef=useRef(true);
+  const scroll=useCallback((force=false)=>{const el=bodyRef.current;if(el&&(force||stickyRef.current))el.scrollTop=el.scrollHeight;},[]);
+  const load=useCallback(async()=>{
+    try{const data=await terminalTranscript(12);setTasks(data.tasks);setNotice('');}
+    catch(e){setNotice(e instanceof Error?e.message:'终端记录读取失败');}
   },[]);
+  const anyActive=tasks.some(t=>ACTIVE.includes(t.status));
+  useEffect(()=>{void load();},[load]);
+  useEffect(()=>{
+    if(!anyActive)return;
+    const timer=setInterval(()=>void load(),1500);
+    return()=>clearInterval(timer);
+  },[anyActive,load]);
+  useEffect(()=>{void Promise.all([getModels(),terminalCapabilities()]).then(([m,c])=>{setModels(m.available.map(x=>x.name));setModel(m.available.some(x=>x.name===m.llm)?m.llm:m.available[0]?.name||'');setCaps(c);}).catch(e=>setNotice(e.message));},[]);
+
+  const merge=(next:TerminalTask)=>setTasks(prev=>prev.some(t=>t.task_id===next.task_id)?prev.map(t=>t.task_id===next.task_id?next:t):[...prev,next]);
+  const approve=async(task:TerminalTask)=>{
+    setBusy(true);
+    try{merge(await confirmTerminal(task.task_id,next_hash(task),ALL_ACKS));setNotice('');}
+    catch(e){setNotice(e instanceof Error?e.message:'确认失败');}
+    finally{setBusy(false);void load();inputRef.current?.focus();}
+  };
+  const stop=async(task:TerminalTask)=>{
+    setBusy(true);
+    try{merge(await cancelTerminal(task.task_id));setNotice('');}
+    catch(e){setNotice(e instanceof Error?e.message:'取消失败');}
+    finally{setBusy(false);void load();}
+  };
+  const replan=async(task:TerminalTask)=>{
+    setBusy(true);
+    try{merge(await proposeTerminal(task.instruction,task.model||model,task.relative_dir||'.'));scroll(true);setNotice('');}
+    catch(e){setNotice(e instanceof Error?e.message:'重新规划失败');}
+    finally{setBusy(false);void load();}
+  };
+  const waiting=[...tasks].reverse().find(t=>t.status==='awaiting_confirmation');
   const submit=async()=>{
-    if(busy||!model||!instruction.trim())return;setBusy(true);
-    try{const next=await proposeTerminal(instruction.trim(),model,directory);setTask(next);setParams({id:next.task_id});setOffset(0);setInstruction('');setError('');}
-    catch(e){setError(e instanceof Error?e.message:'规划失败');}finally{setBusy(false);}
+    const text=instruction.trim();if(!text||busy)return;
+    if(waiting){
+      const answer=text.toLowerCase();
+      if(YES.includes(answer)){setInstruction('');await approve(waiting);return;}
+      if(NO.includes(answer)){setInstruction('');await stop(waiting);return;}
+      setNotice('当前有待确认的计划：输入 y 执行、n 取消。想换需求请先取消这份计划。');return;
+    }
+    if(!model){setNotice('本机暂无可用模型');return;}
+    setBusy(true);
+    try{merge(await proposeTerminal(text,model,directory));setHistory(h=>[...h,text].slice(-50));setHistoryIndex(-1);setInstruction('');setNotice('');scroll(true);}
+    catch(e){setNotice(e instanceof Error?e.message:'规划失败');}
+    finally{setBusy(false);inputRef.current?.focus();}
   };
-  const action=async(kind:'confirm'|'cancel'|'replan',approval?:TerminalApproval)=>{
-    if(!task||busy)return;setBusy(true);
-    try{const next=kind==='confirm'?await confirmTerminal(task.task_id,task.plan_hash||'',approval):kind==='cancel'?await cancelTerminal(task.task_id):await proposeTerminal(task.instruction,task.model||model,task.relative_dir||'.');
-      setTask(next);setParams({id:next.task_id});setError('');if(kind==='replan')setOffset(0);
-    }catch(e){setError(e instanceof Error?e.message:'操作失败');}finally{setBusy(false);}
+  const onKeyDown=(event:KeyboardEvent<HTMLInputElement>)=>{
+    if(event.key==='ArrowUp'&&history.length){event.preventDefault();const next=historyIndex<0?history.length-1:Math.max(0,historyIndex-1);setHistoryIndex(next);setInstruction(history[next]||'');}
+    if(event.key==='ArrowDown'&&historyIndex>=0){event.preventDefault();const next=historyIndex+1;if(next>=history.length){setHistoryIndex(-1);setInstruction('');}else{setHistoryIndex(next);setInstruction(history[next]||'');}}
   };
-  return <section className="jobs-page">
-    <header><h2>AI终端</h2><p>先理解和展示命令，确认后才执行。离开网页不取消已确认任务；电脑与后台需保持运行。</p></header>
-    <section className="job-submit"><textarea aria-label="终端任务指令" rows={3} maxLength={2000} value={instruction} onChange={e=>setInstruction(e.target.value)} placeholder="例如：查看电脑内存大小、运行项目测试，或用管道整理一份文件列表。"/>
-      <div className="job-controls"><label>相对目录 <input aria-label="终端相对目录" maxLength={240} value={directory} onChange={e=>setDirectory(e.target.value)}/></label><select aria-label="终端模型" value={model} onChange={e=>setModel(e.target.value)}>{!model&&<option value="">暂无本地模型</option>}{models.map(m=><option key={m}>{m}</option>)}</select><button disabled={busy||!model||!instruction.trim()} onClick={()=>void submit()}>生成命令计划（不执行）</button></div>
-      <small>工作区：{caps?.workspace||'读取中…'}</small><details><summary>生成式命令与权限说明</summary><p>{caps?.scope}</p><p>AI可生成系统查询、开发命令和完整脚本，不局限于预置功能。所有命令先审核确认；可能读写文件/执行代码/联网需额外确认。无OS沙箱、无网络隔离；不支持管理员密码、交互式输入或常驻服务。计划10分钟内有效。</p></details>
-    </section>
-    {error&&<p role="alert" className="error">{error}</p>}
-    <div className="job-layout"><aside className="job-list">{!tasks.length&&<p className="empty">先描述需求，AI只规划，不会直接执行。</p>}{tasks.map(t=><button key={t.task_id} className={`job-item ${id===t.task_id?'selected':''}`} onClick={()=>{setParams({id:t.task_id});setTask(null);}}><strong>{t.instruction}</strong><small>{terminalLabels[t.status]||t.status}</small></button>)}<div className="job-controls"><button disabled={!offset} onClick={()=>setOffset(Math.max(0,offset-50))}>上一页</button><button disabled={tasks.length<50} onClick={()=>setOffset(offset+50)}>下一页</button></div></aside>
-      <main className="job-result">{task?<TerminalDetails key={task.task_id+task.plan_hash} task={task} busy={busy} onConfirm={approval=>void action('confirm',approval)} onCancel={()=>void action('cancel')} onReplan={()=>void action('replan')}/>:<div className="empty"><h3>计划 → 确认 → 结果</h3><p>选择历史任务或提交新需求。</p></div>}</main></div>
+  return <section className="console-page">
+    <div className="terminal-window">
+      <div className="terminal-titlebar">
+        <span className="traffic"><i className="dot red"/><i className="dot yellow"/><i className="dot green"/></span>
+        <span className="terminal-title">local-agent — zsh — 80×24</span>
+        <span className="terminal-tools">
+          <select aria-label="终端模型" value={model} onChange={e=>setModel(e.target.value)}>{!model&&<option value="">无模型</option>}{models.map(m=><option key={m}>{m}</option>)}</select>
+          <input aria-label="终端相对目录" maxLength={240} value={directory} onChange={e=>setDirectory(e.target.value)} placeholder="相对目录"/>
+        </span>
+      </div>
+      <div className="terminal-body" ref={bodyRef} onScroll={()=>{const el=bodyRef.current;if(el)stickyRef.current=el.scrollHeight-el.scrollTop-el.clientHeight<140;}}>
+        {!tasks.length&&<div className="t-empty">
+          <p className="t-dim">Last login: {new Date().toLocaleString()} on local-agent</p>
+          <p>这是一个本地 AI 终端。用自然语言描述需求，AI 生成真实命令，你确认后才执行。</p>
+          <p className="t-dim">例如：查看电脑内存 · 统计仓库文件数量 · 运行项目测试 · 检查 8092 端口</p>
+        </div>}
+        {tasks.map(task=><TerminalEntry key={task.task_id} task={task} busy={busy} onConfirm={()=>void approve(task)} onCancel={()=>void stop(task)} onReplan={()=>void replan(task)}/>)}
+        {notice&&<p className="t-fail" role="alert">{notice}</p>}
+      </div>
+      <form className="terminal-prompt" onSubmit={event=>{event.preventDefault();void submit();}}>
+        <span className="ps1"><b>❯</b></span>
+        <input ref={inputRef} aria-label="终端对话输入" autoComplete="off" spellCheck={false}
+          placeholder={waiting?'等待确认：输入 y 执行 / n 取消':busy?'处理中…':'用自然语言描述你想在终端做的事，回车发送'}
+          value={instruction} disabled={busy} onChange={e=>setInstruction(e.target.value)} onKeyDown={onKeyDown}/>
+      </form>
+      <footer className="terminal-foot">
+        <span>{caps?.workspace||'读取工作区…'}</span>
+        <span>生成式命令 · 确认后执行 · 非交互式 PTY · 无 OS 沙箱/网络隔离 · 计划 10 分钟有效</span>
+      </footer>
+    </div>
   </section>;
 }
+
+function next_hash(task:TerminalTask){return task.plan_hash||'';}

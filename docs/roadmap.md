@@ -49,6 +49,8 @@
 - [x] Hash-bound account/high-risk/network confirmation records and backend validation.
 - [x] Real model memory query, synthetic development test and shell redirection acceptance.
 - [x] Separate facts/explanation, deterministic memory unit formatting and bounded execution.
+- [x] Console UI: terminal window, single scrollback transcript, bottom `❯` dialogue input
+  with `y`/`n` confirmation, `↑`/`↓` input history and bounded follow-up context.
 - [ ] PTY/password interaction, OS/file/network isolation and long-running service management.
 
 ## Phase 5 — Agent & extensions

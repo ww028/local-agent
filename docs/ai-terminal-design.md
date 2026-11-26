@@ -25,7 +25,7 @@
 
 新增terminal/catalog.py（动作映射/目录/计划hash）、runner.py（固定exec/输出/超时/取消）、
 service.py（任务状态/规划/执行/总结）、store/terminal.py、routes/terminal.py，
-前端TerminalPage/TerminalDetails。复用本地模型适配、SQLite、Host/Origin和静态服务，
+前端TerminalPage（V3起为终端窗口与转录组件TerminalEntry）。复用本地模型适配、SQLite、Host/Origin和静态服务，
 不调用内部SDK或桌面工具，不新增公司资源或遥测。依赖仅Python标准库和既有公开包。
 
 规划模型只调用propose_terminal_plan结构化工具，输出goal、actions（最多4步）或

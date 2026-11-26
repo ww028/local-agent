@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   persist before execution. No OS sandbox or network isolation is implied.
 - Direct system/development commands and reviewed shell pipelines/redirection, bounded
   runtime/output, no shell initialization, pipefail and deterministic memory-unit formatting.
+- Terminal console UI: macOS-style window with one chronological scrollback and a bottom
+  dialogue input; `y`/`n` confirms a pending plan in conversation, `↑`/`↓` recalls input
+  history, and bounded recent transcript context supports follow-up questions.
+- `GET /api/terminal/transcript` for the console scrollback; free text is always model-planned,
+  never executed as a literal shell line.
 - Confirmed AI terminal: local-model planning into a fixed read-only catalog, immutable
   hash-bound ten-minute approval, backend execution and separate output/model explanation.
 - Project-directory/Git-status/diff-stat/recent-log/version actions, bounded stdout/stderr,

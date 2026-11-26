@@ -67,12 +67,21 @@ or a full shell script, not a functional action enum. The backend resolves progr
 binds directory/executable identity and exact content to an immutable plan hash. Scripts
 run via a fixed bash launcher with no initialization files and pipefail; exec avoids shell.
 
-All plans require explicit current-account/no-sandbox acknowledgement. Potential code/
-file effects and network access require additional acknowledgements persisted with approval.
-Warnings are heuristic, not an isolation boundary: arbitrary commands can access the user's
-files/network beyond their initial cwd. No sudo/password or interactive PTY is provided.
+All plans require explicit current-account/no-sandbox acknowledgement. The console's
+`y` answer is one explicit confirmation carrying the account/high-risk/network records
+for the plan shown on screen; potential code/file effects and network access are listed
+before it is accepted. Warnings are heuristic, not an isolation boundary: arbitrary
+commands can access the user's files/network beyond their initial cwd. No sudo/password
+or interactive PTY is provided.
 Each step is bounded to 300 seconds/128KiB; process-group cleanup, cancel and restart records
 remain. Failed commands are not repaired/rerun without a new plan and confirmation.
+
+`GET /api/terminal/transcript` returns recent tasks in chronological order for the
+single console scrollback; the page no longer needs a separate list/detail selection.
+Planning prepends a bounded summary (≤6 finished exchanges: request, commands, exit codes,
+truncated output) marked as untrusted data so follow-ups have context; it cannot reuse
+an earlier approval or inject instructions. Free text in the input box is always planned
+by the model, never executed as a literal shell line.
 
 Legacy catalog records remain readable; new plans never depend on those action enums.
 Recognized exact local lsof results retain structured port facts. Sysctl physical-memory
