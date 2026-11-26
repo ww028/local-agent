@@ -63,3 +63,65 @@ async def test_model_tools_and_run_persistence(tmp_path):
 async def test_unknown_tool():
     with pytest.raises(ValueError):
         await Tools(None).run("shell", {"cmd": "anything"})
+
+
+@pytest.mark.asyncio
+async def test_required_tool_cannot_be_skipped(tmp_path):
+    from app.ollama_client import ModelError
+
+    class Model:
+        async def tool_chat(self, messages, **kwargs):
+            return {"content": "A mental answer without a tool"}
+
+    config = Settings(_env_file=None, data_dir=tmp_path, db_path=tmp_path / "db")
+    conn = get_connection(config)
+    runs = RunRepository(conn)
+    key = runs.create("x", 1, "local")
+    executor = Executor(Model(), Tools(None), runs)
+    with pytest.raises(ModelError, match="not executed"):
+        _ = [
+            item
+            async for item in executor.run(
+                key,
+                [
+                    ChatMessage(role="system", content="local"),
+                    ChatMessage(role="user", content="Use calculator for 2+3"),
+                ],
+                "local",
+            )
+        ]
+    conn.close()
+
+
+@pytest.mark.asyncio
+async def test_agent_cancellation_propagates(tmp_path):
+    import asyncio
+
+    class Model:
+        closed = False
+
+        async def tool_chat(self, messages, **kwargs):
+            try:
+                await asyncio.sleep(60)
+            finally:
+                self.closed = True
+
+    config = Settings(_env_file=None, data_dir=tmp_path, db_path=tmp_path / "db")
+    conn = get_connection(config)
+    runs = RunRepository(conn)
+    key = runs.create("x", 1, "local")
+    model = Model()
+    iterator = Executor(model, Tools(None), runs).run(
+        key,
+        [ChatMessage(role="system", content="local"), ChatMessage(role="user", content="hi")],
+        "local",
+    )
+    await anext(iterator)
+    task = asyncio.create_task(anext(iterator))
+    await asyncio.sleep(0.01)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert model.closed
+    await iterator.aclose()
+    conn.close()

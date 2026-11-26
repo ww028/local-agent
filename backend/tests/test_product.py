@@ -60,6 +60,10 @@ def test_end_to_end_mock(tmp_path):
         run = frames[0]["run_id"]
         assert c.get("/api/runs/" + run).json()["status"] == "complete"
         assert c.get("/api/runs/" + run).json()["events"][1]["data"]["tool"] == "calculator"
+        assert any(item["run_id"] == run for item in c.get("/api/runs").json()["runs"])
+        chat_key = frames[0]["conversation_id"]
+        assert c.delete("/api/chats/" + chat_key).status_code == 200
+        assert c.get("/api/runs/" + run).status_code == 404
         assert (
             c.post("/api/chats/stream", json={"message": "x", "temperature": 5}).status_code == 422
         )

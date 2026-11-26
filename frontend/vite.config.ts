@@ -5,6 +5,13 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, "..", "");
   return {
     plugins: [react()],
+    build: {
+      rollupOptions: { output: { manualChunks: {
+        math: ["katex", "rehype-katex", "remark-math"],
+        highlight: ["rehype-highlight"],
+        react: ["react", "react-dom", "react-router-dom"],
+      } } },
+    },
     server: {
       host: "127.0.0.1", strictPort: true,
       headers: {

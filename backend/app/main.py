@@ -67,7 +67,7 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
             return JSONResponse({"detail": "Cross-origin requests are blocked."}, status_code=403)
         response = await call_next(request)
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; connect-src 'self'; img-src 'self' data:; "
+            "default-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self' data:; "
             "style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
         )
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -76,6 +76,13 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
     app.include_router(models.router)
     app.include_router(chats.router)
     app.include_router(documents.router)
+
+    @app.get("/api/runs")
+    async def list_runs(request: Request):
+        rows = request.app.state.runs.conn.execute(
+            "SELECT r.*,c.title FROM runs r JOIN conversations c ON r.conversation_id=c.conversation_id ORDER BY r.created_at DESC LIMIT 100"
+        )
+        return {"runs": [dict(row) for row in rows]}
 
     @app.get("/api/runs/{key}")
     async def run_detail(key: str, request: Request):
@@ -96,7 +103,7 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
 
         @app.get("/{route:path}", include_in_schema=False)
         async def web(route: str):
-            if route not in {"", "documents"}:
+            if route not in {"", "documents", "runs"}:
                 raise HTTPException(404, "Not found")
             return FileResponse(dist / "index.html")
 
