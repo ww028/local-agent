@@ -12,9 +12,9 @@ const render=(task:TerminalTask)=>renderToStaticMarkup(<TerminalEntry task={task
 describe("TerminalEntry",()=>{
   it("renders request, command and a y/n confirmation prompt",()=>{
     const html=render(base);
-    expect(html).toContain("❯");expect(html).toContain("查看电脑内存");
+    expect(html).toContain("查看电脑内存");expect(html).toContain("你");expect(html).toContain("AI");
     expect(html).toContain("sysctl -n hw.memsize");expect(html).toContain("执行目录");
-    expect(html).toContain("y</kbd> 执行");expect(html).toContain("n</kbd> 取消");
+    expect(html).toContain("需要你确认才执行");expect(html).toContain("<kbd>y</kbd>");
     expect(html).toContain("执行 (y)");expect(html).toContain("取消 (n)");
     expect(html).toContain("无 OS 沙箱");
   });
@@ -36,7 +36,7 @@ describe("TerminalEntry",()=>{
 
   it("shows a planning state before any command exists",()=>{
     const html=render({...base,status:"planning",plan:null,expires_at:null});
-    expect(html).toContain("AI 正在理解需求并生成命令");
+    expect(html).toContain("正在理解需求并生成命令");
     expect(html).not.toContain("执行 (y)");
   });
 });

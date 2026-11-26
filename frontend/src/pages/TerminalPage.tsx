@@ -20,11 +20,18 @@ export default function TerminalPage(){
   const stickyRef=useRef(true);
   const scroll=useCallback((force=false)=>{const el=bodyRef.current;if(el&&(force||stickyRef.current))el.scrollTop=el.scrollHeight;},[]);
   const load=useCallback(async()=>{
-    try{const data=await terminalTranscript(30);setTasks(data.tasks);setNotice('');}
+    try{const data=await terminalTranscript(30);setTasks(data.tasks);setNotice('');
+      requestAnimationFrame(()=>scroll());}
     catch(e){setNotice(e instanceof Error?e.message:'终端记录读取失败');}
   },[]);
   const anyActive=tasks.some(t=>ACTIVE.includes(t.status));
   useEffect(()=>{void load();},[load]);
+  // Follow the newest content whenever it arrives, unless the user scrolled up.
+  useEffect(()=>{
+    const first=requestAnimationFrame(()=>scroll());
+    const second=requestAnimationFrame(()=>requestAnimationFrame(()=>scroll()));
+    return()=>{cancelAnimationFrame(first);cancelAnimationFrame(second);};
+  },[tasks,scroll]);
   useEffect(()=>{
     if(!anyActive)return;
     const timer=setInterval(()=>void load(),1500);
@@ -73,7 +80,6 @@ export default function TerminalPage(){
   return <section className="console-page">
     <div className="terminal-window">
       <div className="terminal-titlebar">
-        <span className="traffic"><i className="dot red"/><i className="dot yellow"/><i className="dot green"/></span>
         <span className="terminal-title">local-agent — zsh — 80×24</span>
         <span className="terminal-tools">
           <select aria-label="终端模型" value={model} onChange={e=>setModel(e.target.value)}>{!model&&<option value="">无模型</option>}{models.map(m=><option key={m}>{m}</option>)}</select>
@@ -89,10 +95,11 @@ export default function TerminalPage(){
         {tasks.map(task=><TerminalEntry key={task.task_id} task={task} busy={busy} onConfirm={()=>void approve(task)} onCancel={()=>void stop(task)} onReplan={()=>void replan(task)}/>)}
         {notice&&<p className="t-fail" role="alert">{notice}</p>}
       </div>
-      <form className="terminal-prompt" onSubmit={event=>{event.preventDefault();void submit();}}>
+      {waiting&&<div className="t-pending-bar">有待确认的计划：在下方输入 <kbd>y</kbd> 执行、<kbd>n</kbd> 取消，或点上方按钮</div>}
+      <form className={`terminal-prompt ${waiting?'awaiting':''}`} onSubmit={event=>{event.preventDefault();void submit();}}>
         <span className="ps1"><b>❯</b></span>
         <input ref={inputRef} aria-label="终端对话输入" autoComplete="off" spellCheck={false}
-          placeholder={waiting?'等待确认：输入 y 执行 / n 取消':busy?'处理中…':'用自然语言描述你想在终端做的事，回车发送'}
+          placeholder={waiting?'待确认：输入 y 执行 / n 取消':busy?'处理中…':'用自然语言描述你想在终端做的事，回车发送'}
           value={instruction} disabled={busy} onChange={e=>setInstruction(e.target.value)} onKeyDown={onKeyDown}/>
       </form>
       <footer className="terminal-foot">

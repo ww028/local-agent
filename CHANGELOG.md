@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Terminal console readability: requests and AI replies render as dialogue bubbles inside
+  the terminal window; the pending decision is an amber "需要你确认才执行" card with large
+  `执行 (y)` / `取消 (n)` buttons plus a hint bar above the input. Decorative traffic-light
+  dots were removed because they were non-functional.
+- The console now auto-scrolls to the newest content (new request, generated plan, streamed
+  output, approval state); following pauses only while you scroll up and resumes at the bottom.
+
 ### Fixed
 - AI terminal now plans/executes confirmed local TCP port diagnostics with strict integer
   targets and persisted facts; local lookup does not need networking. Shared lsof result
