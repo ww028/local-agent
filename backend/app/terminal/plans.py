@@ -195,7 +195,7 @@ def read_only_invocation(name, args):
             and args[0] in GIT_READ
             and not any(a.startswith("--output") or a == "-o" or ">" in a or "|" in a for a in args)
         )
-    if name.startswith(("python", "node", "npm")):
+    if name.startswith(("python", "node", "npm", "pip")):
         return args in (["--version"], ["-V"], ["-v"])
     return False
 
@@ -479,7 +479,20 @@ def detect_version_query(instruction):
     if len(mentioned) != 1:
         return None
     tool = mentioned[0]
-    return tool, shutil.which(tool, path=SEARCH_PATH)
+    # Ask the machine's own toolchain first; the workbench venv only answers if nothing else exists.
+    user_first = os.pathsep.join(
+        dict.fromkeys(
+            [
+                *USER_TOOL_DIRS,
+                "/opt/homebrew/bin",
+                "/usr/local/bin",
+                "/usr/bin",
+                "/bin",
+                str(Path(sys.executable).parent),
+            ]
+        )
+    )
+    return tool, shutil.which(tool, path=user_first)
 
 
 def version_proposal(tool, executable):

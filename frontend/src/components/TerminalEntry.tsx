@@ -7,8 +7,8 @@ export const terminalLabels:Record<string,string>={planning:"AI 生成命令中"
 const COMMANDS='查看即将执行的命令';
 
 /** Short result prose: GFM only, no images/links, so stray Markdown never shows as raw symbols. */
-function Markdown({text}:{text:string}){
-  return <div className="t-explain"><ReactMarkdown skipHtml remarkPlugins={[remarkGfm]} components={{
+function Markdown({text,primary=false}:{text:string;primary?:boolean}){
+  return <div className={primary?'t-result-prose':'t-explain'}><ReactMarkdown skipHtml remarkPlugins={[remarkGfm]} components={{
     img:({alt})=><span>[图片未加载：{alt}]</span>,a:({children})=><span>{children}</span>,
   }}>{text}</ReactMarkdown></div>;
 }
@@ -34,7 +34,7 @@ export default function TerminalEntry({task,busy,onConfirm,onCancel,onReplan}:{t
         {plan&&<p className="t-goal">{plan.goal}</p>}
         {plan?.auto_run&&<p className="t-auto"><span className="t-chip">只读查询 · 已自动执行</span><span className="t-dim">只读取信息，不改动文件或系统设置，所以没有让你再确认。</span></p>}
         {digest&&<div className="t-result"><p className="t-result-label">结果</p><p className="t-result-text">{digest}</p>{explain&&<Markdown text={explain}/>}</div>}
-        {!digest&&!!result&&<div className="t-result"><p className="t-result-label">结果</p><Markdown text={result}/></div>}
+        {!digest&&!!result&&<div className="t-result"><p className="t-result-label">结果</p><Markdown text={result} primary/></div>}
         {task.status==='queued'&&<p className="t-dim">等待执行…</p>}
         {task.status==='running'&&<p className="t-dim">执行中…<span className="t-caret"/></p>}
         {task.status==='cancelling'&&<p className="t-dim">正在停止本任务…</p>}
