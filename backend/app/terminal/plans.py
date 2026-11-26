@@ -14,10 +14,51 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.terminal.catalog import canonical, digest, resolve_directory
 
 POLICY = "generated-terminal-v3"
+
+
+def _version_key(path):
+    return tuple(int(part) for part in re.findall(r"\d+", Path(path).name))
+
+
+def _nvm_bin():
+    """Resolve the nvm default Node version so `node` means what the user's shell means."""
+    root = Path.home() / ".nvm" / "versions" / "node"
+    if not root.is_dir():
+        return None
+    alias = Path.home() / ".nvm" / "alias" / "default"
+    chosen = None
+    if alias.is_file():
+        value = alias.read_text(encoding="utf-8", errors="ignore").strip()
+        if value and not value.startswith("lts"):
+            chosen = root / (value if value.startswith("v") else "v" + value)
+    if chosen is not None and (chosen / "bin").is_dir():
+        return chosen / "bin"
+    versions = sorted((p for p in root.iterdir() if (p / "bin").is_dir()), key=_version_key)
+    return versions[-1] / "bin" if versions else None
+
+
+def _user_tool_dirs():
+    """User-installed toolchains, so version queries see the same tools the user uses."""
+    home = Path.home()
+    candidates = [
+        home / ".volta" / "bin",
+        home / ".local" / "bin",
+        home / ".cargo" / "bin",
+        home / ".pyenv" / "shims",
+        home / ".bun" / "bin",
+    ]
+    nvm = _nvm_bin()
+    if nvm is not None:
+        candidates.insert(0, nvm)
+    return [str(p) for p in candidates if p.is_dir()]
+
+
+USER_TOOL_DIRS = _user_tool_dirs()
 SEARCH_PATH = os.pathsep.join(
     dict.fromkeys(
         [
             str(Path(sys.executable).parent),
+            *USER_TOOL_DIRS,
             "/opt/homebrew/bin",
             "/usr/local/bin",
             "/usr/bin",
@@ -105,6 +146,20 @@ MUTATING = [
 ]
 
 
+def read_only_program(executable):
+    """Executable lives in a fixed system dir or a known user toolchain dir (path, not trust).
+
+    macOS exposes /bin and /usr/sbin through firmlinks, so an allowed dir is matched either
+    literally or by its resolved path; a symlink pointing elsewhere still fails.
+    """
+    parent = Path(executable).parent
+    allowed = [*sorted(SYSTEM_DIRS), *(Path(d) for d in USER_TOOL_DIRS)]
+    if parent in allowed:
+        return True
+    resolved = parent.resolve()
+    return any(resolved == Path(d).resolve() for d in allowed)
+
+
 def read_only_invocation(name, args):
     """Only provable read-only invocations; used to skip confirmation, never as a sandbox."""
     if name == "uname":
@@ -150,7 +205,7 @@ def all_read_only(plan):
         if step.get("kind") != "exec":
             return False
         path = Path(step.get("executable", ""))
-        if path.parent not in SYSTEM_DIRS or not read_only_invocation(
+        if not read_only_program(path) or not read_only_invocation(
             path.name, step.get("args") or []
         ):
             return False
@@ -161,7 +216,7 @@ def step_effects(step):
     """Plain-language consequences for people who do not read command syntax."""
     if (
         step.get("kind") == "exec"
-        and Path(step.get("executable", "")).parent in SYSTEM_DIRS
+        and read_only_program(step.get("executable", ""))
         and read_only_invocation(Path(step["executable"]).name, step.get("args") or [])
     ):
         return ["只读取信息，不会修改文件或系统设置"]
@@ -386,3 +441,55 @@ def normalize_for_intent(instruction, proposal):
             ]
             return args
     return proposal
+
+
+VERSION_TOOLS = {
+    "node": "Node.js",
+    "npm": "npm",
+    "pnpm": "pnpm",
+    "yarn": "Yarn",
+    "python3": "Python",
+    "pip3": "pip",
+    "git": "Git",
+    "go": "Go",
+    "rustc": "Rust",
+    "cargo": "Cargo",
+    "deno": "Deno",
+    "bun": "Bun",
+    "java": "Java",
+}
+VERSION_STOP = re.compile(
+    r"内存|cpu|核数|端口|目录|磁盘|进程|安装|升级|删除|运行|测试|状态|配置|文件", re.I
+)
+
+
+def detect_version_query(instruction):
+    """Deterministic path for "X 版本号": no model guessing, no `which` detour.
+
+    Returns (tool, resolved_executable_or_None); None means the request is not a pure
+    version query for exactly one known tool.
+    """
+    if not re.search(r"版本|version", instruction, re.I) or VERSION_STOP.search(instruction):
+        return None
+    mentioned = []
+    for name in VERSION_TOOLS:
+        pattern = rf"(?<![A-Za-z0-9_.-]){re.escape(name)}(?:\.js)?(?![A-Za-z0-9_.-])"
+        if re.search(pattern, instruction, re.I):
+            mentioned.append(name)
+    if len(mentioned) != 1:
+        return None
+    tool = mentioned[0]
+    return tool, shutil.which(tool, path=SEARCH_PATH)
+
+
+def version_proposal(tool, executable):
+    return {
+        "goal": f"读取{tool}版本号",
+        "steps": [
+            {
+                "program": executable,
+                "args": ["--version"],
+                "description": f"{VERSION_TOOLS[tool]} 版本",
+            }
+        ],
+    }

@@ -10,12 +10,15 @@ from app.schemas import ChatMessage
 from app.terminal.catalog import resolve_directory
 from app.terminal.plans import (
     POLICY,
+    VERSION_TOOLS,
     GeneratedProposal,
     all_read_only,
     build_generated,
+    detect_version_query,
     normalize_for_intent,
     planning_context,
     verify_any,
+    version_proposal,
 )
 from app.terminal.runner import execute_step
 
@@ -70,6 +73,12 @@ def result_digest(plan, records):
             "arm64": "arm64（Apple Silicon / ARM 架构）",
             "x86_64": "x86_64（Intel 64 位）",
         }.get(arch, arch)
+    if args in (["--version"], ["version"], ["-V"]) and out:
+        label = VERSION_TOOLS.get(name)
+        if label:
+            match = re.search(r"\d+\.\d+(?:\.\d+)?", out)
+            if match:
+                return f"{label} 版本：{match.group(0)}"
     if name == "sysctl" and args == ["-n", "machdep.cpu.brand_string"] and out:
         return f"CPU 型号：{out}"
     if name == "sysctl" and args == ["-n", "hw.ncpu"] and out.isdigit():
@@ -194,6 +203,22 @@ class TerminalService:
     async def _plan(self, task):
         key = task["task_id"]
         try:
+            fast = detect_version_query(task["instruction"])
+            if fast is not None:
+                tool, executable = fast
+                if not executable:
+                    raise ValueError(
+                        f"本机 PATH 里没有找到 {tool}（nvm 装的可能没设为默认版本，或没安装）"
+                    )
+                plan = build_generated(
+                    self.state.settings.terminal_workspace,
+                    task["relative_dir"],
+                    version_proposal(tool, executable),
+                )
+                self.repo.save_plan(key, plan)
+                if plan.get("auto_run"):
+                    self.repo.auto_confirm(key)
+                return
             async with asyncio.timeout(150):
                 async with self.state.chat_lock:
                     await self.state.chat_model.validate_model(task["model"])

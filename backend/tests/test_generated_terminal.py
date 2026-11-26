@@ -293,3 +293,16 @@ def test_git_version_auto_runs_and_generic_exec_effects_are_explicit(tmp_path):
         },
     )
     assert "运行本机程序，可能读写文件" in generic["effects"] and not generic["auto_run"]
+
+
+def test_version_query_fast_path_and_digest(tmp_path):
+    from app.terminal.plans import detect_version_query, version_proposal
+    from app.terminal.service import result_digest
+
+    tool, executable = detect_version_query("我电脑的node版本号是多少？")
+    assert tool == "node" and executable and executable.endswith("/node")
+    assert detect_version_query("查看电脑内存和 node 版本") is None
+    plan = build_generated(tmp_path, ".", version_proposal(tool, executable))
+    assert plan["auto_run"] is True
+    records = [{"exit_code": 0, "stdout": "v24.14.1\n", "stderr": ""}]
+    assert result_digest(plan, records) == "Node.js 版本：24.14.1"

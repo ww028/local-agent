@@ -53,7 +53,10 @@ async def execute_step(step, plan, on_output):
             await asyncio.gather(*readers)
             code = await process.wait()
         if code != 0:
-            status, error = "failed", "命令退出码非零，后续步骤未执行"
+            name = step["executable"].rsplit("/", 1)[-1]
+            detail = (display_text(buffers["stderr"]).strip().splitlines() or [""])[0][:160]
+            reason = f"：{detail}" if detail else "（该命令没有任何说明输出）"
+            status, error = "failed", f"{name} 退出码 {code}{reason}；后续步骤未执行"
     except asyncio.CancelledError:
         status = "cancelled"
         raise
@@ -80,7 +83,7 @@ async def execute_step(step, plan, on_output):
                 await asyncio.sleep(0.05)
         await process.wait()
     facts = None
-    if step.get("action") == "check_port" and error in {None, "命令退出码非零，后续步骤未执行"}:
+    if step.get("action") == "check_port" and (error is None or "退出码" in error):
         from app.agent.diagnostics import DiagnosticError, port_result
 
         try:
