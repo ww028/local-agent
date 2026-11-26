@@ -37,7 +37,7 @@ async def capabilities(request: Request):
         "workspace": str(request.app.state.settings.terminal_workspace),
         "policy_version": POLICY,
         "actions": [],
-        "scope": "AI生成实际exec命令或完整shell脚本，审核并确认后执行；可能修改文件/联网，不是OS沙箱，不支持提权密码/交互式输入。",
+        "scope": "AI生成实际exec命令或完整shell脚本，只读查询直接执行；可能修改文件或系统设置、联网的命令需确认后执行；不是OS沙箱，不支持提权密码/交互式输入。",
     }
 
 

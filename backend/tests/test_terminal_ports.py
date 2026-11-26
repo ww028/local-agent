@@ -98,7 +98,7 @@ def test_model_cannot_skip_or_change_port_target(tmp_path, mismatch):
         assert not task["plan"] and not task["steps"]
 
 
-def test_unconfirmed_port_does_not_execute_and_facts_persist(tmp_path, monkeypatch):
+def test_port_query_auto_runs_and_facts_persist(tmp_path, monkeypatch):
     from app.terminal import service
 
     calls = []
@@ -117,13 +117,9 @@ def test_unconfirmed_port_does_not_execute_and_facts_persist(tmp_path, monkeypat
     app = create_app(config(tmp_path), PortModel())
     with TestClient(app, base_url="http://127.0.0.1") as c:
         key = c.post("/api/terminal", json={"instruction": "8092端口是什么服务"}).json()["task_id"]
-        task = wait(c, key, {"awaiting_confirmation"})
-        assert calls == [] and task["steps"] == []
-        c.post(
-            f"/api/terminal/{key}/confirm",
-            json={"plan_hash": task["plan_hash"], "risk_acknowledged": True},
-        )
+        # A port lookup is read-only: no confirmation click, it runs straight away.
         done = wait(c, key, {"completed"})
+        assert done["plan"]["auto_run"] is True
         assert len(calls) == 1
         assert done["steps"][0]["facts"]["port"] == 8092
     with TestClient(create_app(config(tmp_path), PortModel()), base_url="http://127.0.0.1") as c:

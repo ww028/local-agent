@@ -1,6 +1,7 @@
 """Confirmation boundary tests; fixtures are public synthetic project data."""
 
 import asyncio
+import json
 import sys
 import time
 
@@ -60,37 +61,85 @@ def wait(client, key, states):
     raise AssertionError(task)
 
 
-def test_no_execution_before_confirmation_and_idempotency(tmp_path):
+def test_read_only_auto_runs_and_mutating_waits(tmp_path):
     app = create_app(config(tmp_path), PlanningModel())
     with TestClient(app, base_url="http://127.0.0.1") as c:
         r = c.post("/api/terminal", json={"instruction": "查看目录"})
         assert r.status_code == 202
         key = r.json()["task_id"]
-        planned = wait(c, key, {"awaiting_confirmation"})
-        assert planned["steps"] == []
+        # pwd/ls are provable read-only, so they run without a confirmation click.
+        planned = wait(c, key, {"completed", "failed"})
+        assert planned["status"] == "completed" and len(planned["steps"]) == 2
+        assert planned["plan"]["auto_run"] is True
+        assert planned["plan"]["effects"] == ["只读取信息，不会修改文件或系统设置"]
+        assert json.loads(planned["approval"])["auto_readonly"] is True
         assert (
-            c.post(f"/api/terminal/{key}/confirm", json={"plan_hash": "0" * 64}).status_code == 409
+            c.post("/api/terminal", json={"instruction": "x", "command": "anything"}).status_code
+            == 422
         )
+    with TestClient(
+        create_app(config(tmp_path), PlanningModel()), base_url="http://127.0.0.1"
+    ) as c:
+        assert c.get("/api/terminal/" + key).json()["status"] == "completed"
+
+
+def test_mutating_plan_still_needs_explicit_confirmation(tmp_path):
+    class Mutating(PlanningModel):
+        async def tool_chat(self, messages, **kwargs):
+            return {
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "propose_terminal_plan",
+                            "arguments": {
+                                "goal": "写文件",
+                                "steps": [
+                                    {
+                                        "kind": "shell",
+                                        "script": "printf x > made.txt",
+                                        "description": "写入合成文件",
+                                    }
+                                ],
+                            },
+                        }
+                    }
+                ]
+            }
+
+    app = create_app(config(tmp_path), Mutating())
+    with TestClient(app, base_url="http://127.0.0.1") as c:
+        key = c.post("/api/terminal", json={"instruction": "写文件"}).json()["task_id"]
+        planned = wait(c, key, {"awaiting_confirmation"})
+        assert planned["steps"] == [] and not (tmp_path / "made.txt").exists()
+        assert planned["plan"]["auto_run"] is False
+        assert "可能写入或覆盖文件" in planned["plan"]["effects"]
+        bad_hash = c.post(f"/api/terminal/{key}/confirm", json={"plan_hash": "0" * 64})
+        assert bad_hash.status_code == 409
         confirmed = c.post(
             f"/api/terminal/{key}/confirm",
-            json={"plan_hash": planned["plan_hash"], "risk_acknowledged": True},
+            json={
+                "plan_hash": planned["plan_hash"],
+                "risk_acknowledged": True,
+                "high_risk_acknowledged": True,
+                "network_acknowledged": True,
+            },
         )
         assert confirmed.status_code == 200
         assert (
             c.post(
                 f"/api/terminal/{key}/confirm",
-                json={"plan_hash": planned["plan_hash"], "risk_acknowledged": True},
+                json={
+                    "plan_hash": planned["plan_hash"],
+                    "risk_acknowledged": True,
+                    "high_risk_acknowledged": True,
+                    "network_acknowledged": True,
+                },
             ).status_code
             == 200
         )
         done = wait(c, key, {"completed", "failed"})
-        assert done["status"] == "completed" and len(done["steps"]) == 2
-        assert str(tmp_path) in done["steps"][0]["stdout"]
-        assert all(step["exit_code"] == 0 for step in done["steps"])
-        assert (
-            c.post("/api/terminal", json={"instruction": "x", "command": "anything"}).status_code
-            == 422
-        )
+        assert done["status"] == "completed" and (tmp_path / "made.txt").read_text() == "x"
+        assert len(done["steps"]) == 1
     with TestClient(
         create_app(config(tmp_path), PlanningModel()), base_url="http://127.0.0.1"
     ) as c:
@@ -257,9 +306,29 @@ async def test_service_running_cancel_and_shutdown(tmp_path, monkeypatch):
 
 
 def test_cancel_unconfirmed_and_queue_capacity(tmp_path):
-    with TestClient(
-        create_app(config(tmp_path), PlanningModel()), base_url="http://127.0.0.1"
-    ) as c:
+    class Confirming(PlanningModel):
+        async def tool_chat(self, messages, **kwargs):
+            return {
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "propose_terminal_plan",
+                            "arguments": {
+                                "goal": "写合成结果",
+                                "steps": [
+                                    {
+                                        "kind": "shell",
+                                        "script": "printf done > c.txt",
+                                        "description": "写入合成文件",
+                                    }
+                                ],
+                            },
+                        }
+                    }
+                ]
+            }
+
+    with TestClient(create_app(config(tmp_path), Confirming()), base_url="http://127.0.0.1") as c:
         key = c.post("/api/terminal", json={"instruction": "list"}).json()["task_id"]
         planned = wait(c, key, {"awaiting_confirmation"})
         assert c.post(f"/api/terminal/{key}/cancel").json()["status"] == "cancelled"

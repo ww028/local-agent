@@ -74,19 +74,111 @@ def executable(program, cwd=None):
     return str(Path(candidate).resolve())
 
 
-def readonly_query(name, args):
-    # Used only to improve warnings, never as an execution allowlist.
-    if name in {"pwd", "sw_vers", "uname", "uptime"}:
-        return not any(a.startswith("--") for a in args)
+SYSTEM_DIRS = {Path("/usr/bin"), Path("/bin"), Path("/usr/sbin"), Path("/sbin")}
+# Accepted short-flag letters for provable read-only listing tools (combined flags allowed).
+READ_ONLY_FLAGS = {"ls": set("lahtrS1dFG"), "df": set("hkmgHPi"), "du": set("hskmaxL")}
+SYSCTL_READ = {
+    "hw.memsize",
+    "hw.physmem",
+    "hw.ncpu",
+    "hw.machine",
+    "hw.model",
+    "machdep.cpu.brand_string",
+    "machdep.cpu.core_count",
+    "kern.osproductversion",
+    "kern.osversion",
+    "kern.ostype",
+    "hw.pagesize",
+    "hw.cachelinesize",
+}
+GIT_READ = {"status", "log", "diff", "show", "rev-parse", "describe", "branch", "ls-files"}
+MUTATING = [
+    (r"\brm\b", "可能删除文件"),
+    (r"\bmv\b", "可能移动或覆盖文件"),
+    (r"\bcp\b", "可能复制或覆盖文件"),
+    (r"(?:^|[ \t;|&])(?:>>?)(?![&>])", "可能写入或覆盖文件"),
+    (r"\bmkdir\b|\btouch\b|\btee\b", "可能创建或写入文件"),
+    (r"\b(?:brew\s+install|apt\s+install|pip3?\s+install|npm\s+(?:i|install))\b", "可能安装软件"),
+    (r"\bchmod\b|\bchown\b", "可能修改文件权限"),
+    (r"\bkill\b|\bpkill\b|\bkillall\b", "可能结束进程"),
+    (r"\bdefaults\s+write\b|\blaunchctl\b|\bnetworksetup\b", "可能修改系统设置"),
+]
+
+
+def read_only_invocation(name, args):
+    """Only provable read-only invocations; used to skip confirmation, never as a sandbox."""
+    if name == "uname":
+        return bool(args) and set(args) <= {"-a", "-m", "-n", "-r", "-s", "-p", "-i", "-v"}
+    if name == "sw_vers":
+        return not args or set(args) <= {"-productName", "-productVersion", "-buildVersion"}
     if name == "sysctl":
-        return bool(args) and "-w" not in args and not any("=" in a for a in args)
-    if name in {"ls", "df", "du", "vm_stat", "free"}:
-        return all(not any(c in a for c in "\n\r") for a in args)
+        return len(args) == 2 and args[0] == "-n" and args[1] in SYSCTL_READ
+    if name == "vm_stat":
+        return not args or (len(args) == 1 and args[0].isdigit())
+    if name in {"pwd", "uptime", "whoami", "date"}:
+        return not args or args in (["-P"], ["-L"])
+    if name == "id":
+        return not args or args == ["-u"]
+    if name == "ps":
+        return bool(args) and set(args) <= {"-ax", "-ef", "-A", "-e"}
     if name == "lsof":
+        return detect_port_query("lsof", args) is not None
+    if name in READ_ONLY_FLAGS:
+        letters = READ_ONLY_FLAGS[name]
+        for a in args:
+            if a.startswith("-"):
+                if not (len(a) > 1 and set(a[1:]) <= letters):
+                    return False
+            elif not a:
+                return False
         return True
     if name == "git":
-        return args == ["--version"]
-    return name.startswith(("python", "node", "npm")) and args in (["--version"], ["-V"])
+        if args in (["--version"], ["version"]):
+            return True
+        return (
+            bool(args)
+            and args[0] in GIT_READ
+            and not any(a.startswith("--output") or a == "-o" or ">" in a or "|" in a for a in args)
+        )
+    if name.startswith(("python", "node", "npm")):
+        return args in (["--version"], ["-V"], ["-v"])
+    return False
+
+
+def all_read_only(plan):
+    for step in plan.get("steps", []):
+        if step.get("kind") != "exec":
+            return False
+        path = Path(step.get("executable", ""))
+        if path.parent not in SYSTEM_DIRS or not read_only_invocation(
+            path.name, step.get("args") or []
+        ):
+            return False
+    return bool(plan.get("steps"))
+
+
+def step_effects(step):
+    """Plain-language consequences for people who do not read command syntax."""
+    if (
+        step.get("kind") == "exec"
+        and Path(step.get("executable", "")).parent in SYSTEM_DIRS
+        and read_only_invocation(Path(step["executable"]).name, step.get("args") or [])
+    ):
+        return ["只读取信息，不会修改文件或系统设置"]
+    found = []
+    text = step.get("script") or step.get("command", "")
+    for pattern, label in MUTATING:
+        if re.search(pattern, text):
+            found.append(label)
+    if step.get("may_access_network"):
+        found.append("可能访问网络")
+    if step.get("kind") == "shell":
+        found.insert(0, "执行脚本，可能改动文件")
+    if step.get("kind") == "exec":
+        found.insert(0, "运行本机程序，可能读写文件")
+    if not found:
+        found = ["运行程序，可能读写文件"]
+    return list(dict.fromkeys(found))
 
 
 def detect_port_query(path, args):
@@ -111,7 +203,6 @@ def build_generated(workspace, relative, proposal):
         )
     cwd = resolve_directory(workspace, relative)
     steps = []
-    warnings = ["命令以当前用户账号运行，可访问该账号的文件和网络；初始工作目录限制不是OS沙箱。"]
     high = False
     network = False
     for item in proposal.steps:
@@ -130,12 +221,7 @@ def build_generated(workspace, relative, proposal):
             path = executable(item.program, cwd)
             args = list(item.args)
             name = Path(path).name
-            query = Path(path).parent in {
-                Path("/usr/bin"),
-                Path("/bin"),
-                Path("/usr/sbin"),
-                Path("/sbin"),
-            } and readonly_query(name, args)
+            query = Path(path).parent in SYSTEM_DIRS and read_only_invocation(name, args)
             risk = "low" if query else "high"
             may_network = not query or bool(re.search(r"https?://|ssh://", raw))
             reason = (
@@ -170,6 +256,17 @@ def build_generated(workspace, relative, proposal):
             step.update({"action": "check_port", "port": port})
         steps.append(step)
     stat = cwd.stat()
+    auto_run = all_read_only({"steps": steps})
+    effects = []
+    for step in steps:
+        effects.extend(step_effects(step))
+    effects = list(dict.fromkeys(effects))
+    impact = "；".join(effects) + "。取消不回滚已发生的改动。"
+    warnings = (
+        []
+        if auto_run
+        else ["这条命令以当前账号运行，能访问你的文件和网络；确认不是沙箱，只代表同意这次执行。"]
+    )
     environment = {
         "PATH": SEARCH_PATH,
         "HOME": str(Path.home()),
@@ -190,7 +287,9 @@ def build_generated(workspace, relative, proposal):
         "directory_device": stat.st_dev,
         "directory_inode": stat.st_ino,
         "environment": environment,
-        "impact": "生成式命令计划；可能读写文件或联网，以完整命令和风险提示为准；取消不回滚。",
+        "impact": impact,
+        "effects": effects,
+        "auto_run": auto_run,
         "risk": "high" if high else "low",
         "warnings": warnings,
         "requires_risk_ack": True,
@@ -261,3 +360,29 @@ def planning_context():
         "python": sys.executable,
         "tools": {name: path for name, path in tools.items() if path},
     }
+
+
+CPU_MODEL_INTENT = re.compile("处理器|cpu|cpu型号|芯片|芯片型号", re.I)
+
+
+def normalize_for_intent(instruction, proposal):
+    """Deterministic fix-ups where a small local model keeps answering a nearby question."""
+    steps = proposal.get("steps") or []
+    if CPU_MODEL_INTENT.search(instruction):
+        # "CPU 型号" needs the brand string; uname -m only reports architecture.
+        only_arch = (
+            len(steps) == 1
+            and steps[0].get("kind", "exec") == "exec"
+            and str(steps[0].get("program", "")).endswith("uname")
+        )
+        if only_arch and steps[0].get("args") in (["-m"], ["--machine"], []):
+            args = dict(proposal)
+            args["steps"] = [
+                {
+                    "program": "/usr/sbin/sysctl",
+                    "args": ["-n", "machdep.cpu.brand_string"],
+                    "description": "读取 CPU 型号",
+                }
+            ]
+            return args
+    return proposal

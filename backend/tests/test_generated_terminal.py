@@ -42,7 +42,11 @@ def test_generated_exec_no_action_catalog(tmp_path):
         ".",
         {"goal": "query", "steps": [{"program": "/bin/pwd", "args": ["-P"], "description": "pwd"}]},
     )
-    assert plan["requires_risk_ack"] and not plan["requires_high_risk_ack"]
+    # pwd is a provable read-only query, so it runs without a confirmation click.
+    assert (
+        plan["auto_run"] and not plan["requires_high_risk_ack"] and not plan["requires_network_ack"]
+    )
+    assert plan["effects"] == ["只读取信息，不会修改文件或系统设置"]
     assert verify_generated(tmp_path, plan, digest(plan)) == plan
     plan["steps"][0]["args"].append("other")
     with pytest.raises(ValueError):
@@ -62,6 +66,7 @@ def test_generated_exec_no_action_catalog(tmp_path):
         },
     )
     assert custom["requires_high_risk_ack"] and custom["requires_network_ack"]
+    assert not custom["auto_run"]
 
 
 def test_shell_requires_all_acks_and_runs_once(tmp_path):
@@ -140,7 +145,14 @@ async def test_generated_without_saved_approval_never_executes(tmp_path):
     app = create_app(config(tmp_path), PlanningModel())
     async with app.router.lifespan_context(app):
         plan = build_generated(
-            tmp_path, ".", {"goal": "x", "steps": [{"program": "/bin/pwd", "description": "x"}]}
+            tmp_path,
+            ".",
+            {
+                "goal": "x",
+                "steps": [
+                    {"kind": "shell", "script": "printf x > y.txt", "description": "写入合成文件"}
+                ],
+            },
         )
         key = app.state.terminal.repo.create("x", "test:local", ".")["task_id"]
         app.state.terminal.repo.save_plan(key, plan)
@@ -152,7 +164,7 @@ async def test_generated_without_saved_approval_never_executes(tmp_path):
                 break
             await asyncio.sleep(0.01)
         assert task["status"] == "failed" and task["steps"] == []
-        assert "账号权限" in task["error"]
+        assert "确认" in task["error"] and not (tmp_path / "y.txt").exists()
 
 
 def test_memory_unit_explanation_is_deterministic():
@@ -210,7 +222,9 @@ def test_session_context_is_untrusted_and_bounded(tmp_path):
     from app.store.terminal import TerminalRepository
     from app.terminal.service import session_context
 
-    conn = get_connection(Settings(_env_file=None, data_dir=tmp_path, db_path=tmp_path / "db.sqlite"))
+    conn = get_connection(
+        Settings(_env_file=None, data_dir=tmp_path, db_path=tmp_path / "db.sqlite")
+    )
     repo = TerminalRepository(conn)
     done = repo.create("查看内存", "m", ".")
     repo.save_plan(done["task_id"], {"steps": [{"command": "sysctl -n hw.memsize"}]})
@@ -237,3 +251,45 @@ def test_requested_pipeline_cannot_be_split_into_disconnected_execs(tmp_path):
         ]
         task = wait(c, key, {"failed"})
         assert "管道" in task["error"] and not task["steps"]
+
+
+def test_cpu_model_intent_is_normalized_to_brand_string():
+    from app.terminal.plans import normalize_for_intent
+
+    arch = {
+        "goal": "x",
+        "steps": [{"program": "/usr/bin/uname", "args": ["-m"], "description": "架构"}],
+    }
+    fixed = normalize_for_intent("查一下我电脑cpu的型号", arch)
+    assert fixed["steps"][0]["program"] == "/usr/sbin/sysctl"
+    assert fixed["steps"][0]["args"] == ["-n", "machdep.cpu.brand_string"]
+    assert normalize_for_intent("我的电脑是什么架构", arch) == arch
+
+
+def test_git_version_auto_runs_and_generic_exec_effects_are_explicit(tmp_path):
+    plan = build_generated(
+        tmp_path,
+        ".",
+        {
+            "goal": "git 版本",
+            "steps": [
+                {"program": "/usr/bin/git", "args": ["--version"], "description": "git 版本"}
+            ],
+        },
+    )
+    assert plan["auto_run"] is True
+    generic = build_generated(
+        tmp_path,
+        ".",
+        {
+            "goal": "运行脚本",
+            "steps": [
+                {
+                    "program": sys.executable,
+                    "args": ["-I", "-c", "print(1)"],
+                    "description": "python",
+                }
+            ],
+        },
+    )
+    assert "运行本机程序，可能读写文件" in generic["effects"] and not generic["auto_run"]

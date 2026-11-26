@@ -119,6 +119,15 @@ class TerminalRepository:
             )
         return self.get(key)
 
+    def auto_confirm(self, key, approval=None):
+        """Read-only plans may run without a click; recorded for audit."""
+        with self.conn:
+            self.conn.execute(
+                "UPDATE terminal_tasks SET status='queued',confirmed_at=?,updated_at=?,approval=? WHERE task_id=? AND status='awaiting_confirmation'",
+                (now(), now(), json.dumps(approval or {"auto_readonly": True}), key),
+            )
+        return self.get(key)
+
     def claim(self, key):
         with self.conn:
             r = self.conn.execute(
@@ -127,12 +136,12 @@ class TerminalRepository:
             )
         return r.rowcount == 1
 
-    def finish(self, key, status, error=None, summary=""):
+    def finish(self, key, status, error=None, summary="", digest=None):
         assert status in TERMINAL
         with self.conn:
             self.conn.execute(
-                "UPDATE terminal_tasks SET status=?,error=?,summary=?,finished_at=?,updated_at=? WHERE task_id=? AND status NOT IN ('completed','failed','cancelled','interrupted','expired')",
-                (status, error, summary, now(), now(), key),
+                "UPDATE terminal_tasks SET status=?,error=?,summary=?,digest=?,finished_at=?,updated_at=? WHERE task_id=? AND status NOT IN ('completed','failed','cancelled','interrupted','expired')",
+                (status, error, summary, digest, now(), now(), key),
             )
 
     def cancel(self, key):
