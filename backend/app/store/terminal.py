@@ -14,7 +14,30 @@ class TerminalRepository:
     def __init__(self, conn):
         self.conn = conn
 
-    def create(self, instruction, model, relative):
+    def new_conversation(self, title=""):
+        key = uuid.uuid4().hex
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO terminal_conversations (conversation_id,title,created_at) VALUES (?,?,?)",
+                (key, title, now()),
+            )
+        return key
+
+    def current_conversation(self):
+        row = self.conn.execute(
+            "SELECT conversation_id FROM terminal_conversations ORDER BY created_at DESC, rowid DESC LIMIT 1"
+        ).fetchone()
+        return row[0] if row else self.new_conversation()
+
+    def has_conversation(self, key):
+        return (
+            self.conn.execute(
+                "SELECT 1 FROM terminal_conversations WHERE conversation_id=?", (key,)
+            ).fetchone()
+            is not None
+        )
+
+    def create(self, instruction, model, relative, conversation_id=None):
         key = uuid.uuid4().hex
         with self.conn:
             count = self.conn.execute(
@@ -23,8 +46,8 @@ class TerminalRepository:
             if count >= 16:
                 raise ValueError("AI终端任务已达16个，请取消等待任务")
             self.conn.execute(
-                "INSERT INTO terminal_tasks (task_id,instruction,model,relative_dir,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
-                (key, instruction, model, relative, "planning", now(), now()),
+                "INSERT INTO terminal_tasks (task_id,instruction,model,relative_dir,status,created_at,updated_at,conversation_id) VALUES (?,?,?,?,?,?,?,?)",
+                (key, instruction, model, relative, "planning", now(), now(), conversation_id),
             )
         return self.get(key)
 
@@ -62,16 +85,26 @@ class TerminalRepository:
             )
         ]
 
-    def transcript(self, limit):
+    def transcript(self, limit, conversation_id=None):
         """Chronological recent tasks for a single console transcript view."""
         self.expire()
-        keys = [
-            row[0]
-            for row in self.conn.execute(
-                "SELECT task_id FROM terminal_tasks ORDER BY created_at DESC, rowid DESC LIMIT ?",
-                (limit,),
-            )
-        ]
+        if conversation_id:
+            keys = [
+                row[0]
+                for row in self.conn.execute(
+                    "SELECT task_id FROM terminal_tasks WHERE conversation_id=? "
+                    "ORDER BY created_at DESC, rowid DESC LIMIT ?",
+                    (conversation_id, limit),
+                )
+            ]
+        else:
+            keys = [
+                row[0]
+                for row in self.conn.execute(
+                    "SELECT task_id FROM terminal_tasks ORDER BY created_at DESC, rowid DESC LIMIT ?",
+                    (limit,),
+                )
+            ]
         return [self.get(key) for key in reversed(keys)]
 
     def next(self, status):

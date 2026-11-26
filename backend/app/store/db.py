@@ -126,6 +126,41 @@ def get_connection(settings: Settings) -> sqlite3.Connection:
         conn.execute("ALTER TABLE terminal_tasks ADD COLUMN approval TEXT")
     if "digest" not in columns:
         conn.execute("ALTER TABLE terminal_tasks ADD COLUMN digest TEXT")
+    if "conversation_id" not in columns:
+        conn.execute("ALTER TABLE terminal_tasks ADD COLUMN conversation_id TEXT")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS terminal_conversations ("
+        "conversation_id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', "
+        "created_at TEXT NOT NULL)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS terminal_conversation_created "
+        "ON terminal_tasks(conversation_id,created_at)"
+    )
+    orphan = conn.execute(
+        "SELECT 1 FROM terminal_tasks WHERE conversation_id IS NULL LIMIT 1"
+    ).fetchone()
+    if orphan:
+        row = conn.execute(
+            "SELECT conversation_id FROM terminal_conversations ORDER BY created_at, rowid LIMIT 1"
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE terminal_tasks SET conversation_id=? WHERE conversation_id IS NULL",
+                (row[0],),
+            )
+        else:
+            import uuid
+
+            legacy = uuid.uuid4().hex
+            conn.execute(
+                "INSERT INTO terminal_conversations (conversation_id,title,created_at) VALUES (?,?,CURRENT_TIMESTAMP)",
+                (legacy, "历史"),
+            )
+            conn.execute(
+                "UPDATE terminal_tasks SET conversation_id=? WHERE conversation_id IS NULL",
+                (legacy,),
+            )
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(terminal_steps)")}
     if "facts" not in columns:
         conn.execute("ALTER TABLE terminal_steps ADD COLUMN facts TEXT")

@@ -416,7 +416,7 @@ def test_session_context_respects_byte_budget():
                 for i in range(8)
             ]
 
-        def transcript(self, limit):
+        def transcript(self, limit, conversation_id=None):
             return self.tasks[-limit:]
 
     full = session_context(Repo(), "t9", budget=None)

@@ -32,14 +32,23 @@ export async function terminalCapabilities(): Promise<{workspace:string;scope:st
 export async function listTerminal(offset=0): Promise<{tasks:TerminalTask[]}> {
   return parseJson(await fetch(`/api/terminal?limit=50&offset=${offset}`));
 }
-export async function terminalTranscript(limit=30): Promise<{tasks:TerminalTask[]}> {
-  return parseJson(await fetch(`/api/terminal/transcript?limit=${limit}`));
+export async function terminalTranscript(limit=30,conversation_id?:string): Promise<{tasks:TerminalTask[]}> {
+  const q=new URLSearchParams({limit:String(limit)});
+  if(conversation_id)q.set('conversation_id',conversation_id);
+  return parseJson(await fetch(`/api/terminal/transcript?${q.toString()}`));
+}
+export async function terminalConversation(conversation_id?:string): Promise<import('./types').TerminalConversation> {
+  const q=conversation_id?`?conversation_id=${encodeURIComponent(conversation_id)}`:'';
+  return parseJson(await fetch(`/api/terminal/conversation${q}`));
+}
+export async function newTerminalConversation(): Promise<import('./types').TerminalConversation> {
+  return parseJson(await fetch('/api/terminal/conversation',{method:'POST'}));
 }
 export async function getTerminal(id:string): Promise<TerminalTask> {
   return parseJson(await fetch(`/api/terminal/${encodeURIComponent(id)}`));
 }
-export async function proposeTerminal(instruction:string,model:string,relative_dir:string): Promise<TerminalTask> {
-  return parseJson(await fetch('/api/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instruction,model,relative_dir})}));
+export async function proposeTerminal(instruction:string,model:string,relative_dir:string,conversation_id?:string): Promise<TerminalTask> {
+  return parseJson(await fetch('/api/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instruction,model,relative_dir,conversation_id})}));
 }
 export async function confirmTerminal(id:string,plan_hash:string,approval?:import('./types').TerminalApproval): Promise<TerminalTask> {
   return parseJson(await fetch(`/api/terminal/${encodeURIComponent(id)}/confirm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan_hash,...approval})}));

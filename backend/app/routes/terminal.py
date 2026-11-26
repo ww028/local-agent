@@ -13,6 +13,7 @@ class Submit(BaseModel):
     instruction: str = Field(min_length=1, max_length=2000)
     relative_dir: str = Field(default=".", max_length=240)
     model: str | None = Field(default=None, max_length=200)
+    conversation_id: str | None = Field(default=None, max_length=64)
 
     @field_validator("instruction")
     @classmethod
@@ -45,7 +46,10 @@ async def capabilities(request: Request):
 async def submit(body: Submit, request: Request):
     try:
         return request.app.state.terminal.submit(
-            body.instruction, body.model or request.app.state.settings.llm_model, body.relative_dir
+            body.instruction,
+            body.model or request.app.state.settings.llm_model,
+            body.relative_dir,
+            body.conversation_id,
         )
     except (ValueError, OSError) as exc:
         raise HTTPException(409, str(exc)) from exc
@@ -58,9 +62,25 @@ async def listing(
     return {"tasks": request.app.state.terminal.repo.list(limit, offset)}
 
 
+@router.get("/conversation")
+async def conversation(request: Request, conversation_id: str | None = Query(None, max_length=64)):
+    """Current console conversation plus how much of the model window it occupies."""
+    return request.app.state.terminal.conversation_state(conversation_id)
+
+
+@router.post("/conversation", status_code=201)
+async def new_conversation(request: Request):
+    request.app.state.terminal.new_conversation()
+    return request.app.state.terminal.conversation_state()
+
+
 @router.get("/transcript")
-async def transcript(request: Request, limit: int = Query(20, ge=1, le=50)):
-    return {"tasks": request.app.state.terminal.repo.transcript(limit)}
+async def transcript(
+    request: Request,
+    limit: int = Query(20, ge=1, le=50),
+    conversation_id: str | None = Query(None, max_length=64),
+):
+    return {"tasks": request.app.state.terminal.repo.transcript(limit, conversation_id)}
 
 
 @router.get("/{key}")

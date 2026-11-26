@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Terminal conversations: every task now belongs to a `conversation_id`, follow-up history is
+  read only from that conversation, and "新开对话" (`POST /api/terminal/conversation`) starts a
+  clean window instead of stacking context forever.
+- Context usage is visible: `GET /api/terminal/conversation` (and the console status line) report
+  the fixed prompt bytes, the history bytes actually sent after trimming, the raw history size,
+  the budget, the remaining bytes and the percentage, plus how many turns are kept.
+
 ### Changed
 - The terminal now accounts for the model's context window instead of silently overflowing it:
   `prompt_budget()` (= `num_ctx - num_predict - 512`, the same byte-as-token convention used by

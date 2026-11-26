@@ -198,3 +198,25 @@ DoubaoWork 沙箱里的 python3.14，不在受信任目录 → 确认；确认�
 验收：`my python 版本呢？` 正常执行不受影响；1600 字的超长问题返回
 “这次请求太长 …（NUM_CTX=8192），请精简问题，或在 .env 调大 NUM_CTX”，不再把请求
 送进一个装不下的窗口。后端 103 项用例通过。
+
+### 会话与上下文用量（2026-11-26 追加）
+
+终端原来只有一条全局转录，追问没有边界，也看不见自己占了多少窗口。现在拆成会话：
+
+- **每段对话是一个 `conversation_id`**：`terminal_conversations` 存会话，`terminal_tasks`
+  增列 `conversation_id`；历史任务在迁移时归到最早的那个会话，不会凭空消失。
+- **历史只在本会话内使用**：`session_context()` 按 `conversation_id` 过滤，规划提示里的
+  “最近终端转录”只含本会话最近 6 轮；换会话即换上下文，模型不会串味。
+- **新开对话**：`POST /api/terminal/conversation` 建新会话并返回它的用量；前端标题栏
+  的“新开对话”按钮直接切过去，转录清空，旧会话的记录仍留在库里可按 id 查看。
+- **上下文用量可见**：`GET /api/terminal/conversation` 返回
+  `system_bytes`（固定提示约 3.3K）、`history_bytes`（实际送进模型的历史，已按剩余预算裁剪）、
+  `raw_history_bytes`（本会话原始历史）、`budget_bytes`（NUM_CTX 预算）、`used_bytes`、
+  `remaining_bytes`、`percent`、`turns`/`raw_turns`。底部状态栏显示
+  “上下文 3.4K / 6.5K（52%）· 历史 1/6 轮 · 剩 3.1K”，悬停可看原始历史被裁到多少。
+- 预算不足时先裁最旧轮次；只剩一轮还装不下时把这一轮的 `request/commands/output`
+  缩到 80 字符保留——**宁可短，也不要把“上一句是什么”整个丢掉**，否则追问会答非所问。
+
+验收：新会话 `turns=0`；切回旧会话仍能看到原任务与用量；59 条历史的老会话
+`raw_history_bytes=15.2K` 而 `history_bytes` 被裁到 154 字节，`percent` 仍为 52%，
+追问（“那内存呢？”）依旧能识别上下文。后端 104 项、前端 17 项用例通过。

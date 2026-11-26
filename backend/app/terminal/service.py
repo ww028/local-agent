@@ -113,7 +113,7 @@ def message_cost(items):
     return sum(len((m.get("content") or "").encode("utf-8")) + 32 for m in items)
 
 
-def session_context(repo, key, limit=6, budget=None):
+def session_context(repo, key, conversation_id=None, limit=6, budget=None):
     """Bounded previous exchanges; outputs stay untrusted evidence, never instructions.
 
     The window is capped twice: a fixed number of turns, and — when a budget is given —
@@ -121,7 +121,7 @@ def session_context(repo, key, limit=6, budget=None):
     prompt can never squeeze out the current instruction.
     """
     entries = []
-    for task in repo.transcript(limit + 1):
+    for task in repo.transcript(limit + 1, conversation_id):
         if task["task_id"] == key or task["status"] not in {"completed", "failed", "cancelled"}:
             continue
         commands = [step["command"] for step in (task["plan"] or {}).get("steps", [])]
@@ -139,13 +139,19 @@ def session_context(repo, key, limit=6, budget=None):
         )
     entries = entries[-limit:]
     if budget is not None:
-        while entries and len(json.dumps(entries, ensure_ascii=False).encode()) > budget:
+
+        def size() -> int:
+            return len(json.dumps(entries, ensure_ascii=False).encode())
+
+        while entries and size() > budget:
             if len(entries) > 1:
                 entries.pop(0)
             else:
-                entries[0]["output"] = entries[0]["output"][:120]
+                # Keep the latest turn, just shorter: losing all memory breaks follow-up questions.
+                entries[0]["request"] = entries[0]["request"][:80]
                 entries[0]["commands"] = entries[0]["commands"][:1]
-                if len(json.dumps(entries, ensure_ascii=False).encode()) > budget:
+                entries[0]["output"] = entries[0]["output"][:80]
+                if size() > budget:
                     entries = []
                 break
     return entries
@@ -173,6 +179,37 @@ def check_approval(plan, approval):
         raise ValueError("该命令可能联网，请单独确认网络影响")
 
 
+def planning_system_prompt(workspace, relative_dir):
+    """The exact planning system prompt, so the console can measure its footprint."""
+    context = planning_context()
+    return (
+        "You generate command plans for a local AI terminal console. Call propose_terminal_plan. There is NO action whitelist. "
+        "Use actual program and args for exec, or kind=shell with complete script for pipelines/redirection. "
+        "Separate exec steps have CLOSED stdin and do not pipe output to the next step. A pipeline MUST be one shell step with its full script; never split echo/tr into exec steps. "
+        "You can plan memory/disk/OS queries, project tests/builds/file operations or installation/network commands; explicit human review is mandatory. "
+        "Never claim execution. No sudo/password interaction, credential access, daemon/background detachment. "
+        "Prefer minimal noninteractive commands. On macOS physical RAM is sysctl -n hw.memsize; do not reject it. "
+        "Do not add a second hw.physmem query on macOS; it is not a GiB conversion. Query raw capacity once, and leave unit conversion to result explanation. "
+        "For local TCP listeners use exec lsof with args -nP -iTCP:PORT -sTCP:LISTEN -Fpcn (no networking). "
+        "CPU model on macOS is sysctl -n machdep.cpu.brand_string; uname -m only reports architecture, so use it only when the user asks architecture. "
+        "Provable read-only queries (e.g. uname/sw_vers/sysctl -n with known keys/pwd/ls/lsof/git status) run automatically without a click; "
+        "only steps that may write files, change system settings, install software or use the network wait for human confirmation. "
+        "Answer the asked fact with the fewest steps; never append extra exploratory commands. "
+        "Read-only pipelines over local files (ls | grep -E, find, cat | grep, ps | grep, launchctl list) run without a click, so keep them free of redirection, subshells and writes. "
+        "Use grep -E (or egrep) whenever you need alternation; a plain grep pattern is literal. "
+        "Exit code 1 from grep/find/lsof means 'nothing matched', not an error: report it as a result, not a failure. "
+        "Use the exact user-requested targets. Do not add operations. Use at most 4 steps. "
+        "Do not use shell initialization or depend on secrets. Explain goal/steps in Chinese. Runtime context: "
+        + json.dumps(context, ensure_ascii=False)
+        + ". Installed programs live in: "
+        + " ".join((context.get("path_dirs") or [])[:8])
+        + "; when asked what software or databases are installed, list those dirs"
+        " in ONE read-only step such as ls <dirs> | grep -Ei '<names>'."
+        + "; working directory: "
+        + str(resolve_directory(workspace, relative_dir))
+    )
+
+
 class TerminalService:
     def __init__(self, state, repo):
         self.state, self.repo = state, repo
@@ -192,11 +229,43 @@ class TerminalService:
             worker.cancel()
         await asyncio.gather(*self.workers, return_exceptions=True)
 
-    def submit(self, instruction, model, relative):
+    def submit(self, instruction, model, relative, conversation_id=None):
         resolve_directory(self.state.settings.terminal_workspace, relative)
         if len(instruction.encode()) > 5000:
             raise ValueError("终端指令过长，请缩小范围")
-        return self.repo.create(instruction, model, relative)
+        if not conversation_id or not self.repo.has_conversation(conversation_id):
+            conversation_id = self.repo.current_conversation()
+        return self.repo.create(instruction, model, relative, conversation_id)
+
+    def new_conversation(self):
+        return self.repo.new_conversation()
+
+    def conversation_state(self, conversation_id=None):
+        """How much of the model window this console conversation already holds."""
+        key = conversation_id
+        if not key or not self.repo.has_conversation(key):
+            key = self.repo.current_conversation()
+        budget = prompt_budget(self.state.settings)
+        system_bytes = len(
+            planning_system_prompt(self.state.settings.terminal_workspace, ".").encode()
+        )
+        raw = session_context(self.repo, "", key)
+        # What actually reaches the model: history is trimmed to the remaining window.
+        recent = session_context(self.repo, "", key, budget=max(0, budget - system_bytes - 64))
+        history_bytes = len(json.dumps(recent, ensure_ascii=False).encode())
+        used = system_bytes + history_bytes
+        return {
+            "conversation_id": key,
+            "turns": len(recent),
+            "raw_turns": len(raw),
+            "used_bytes": used,
+            "system_bytes": system_bytes,
+            "history_bytes": history_bytes,
+            "raw_history_bytes": len(json.dumps(raw, ensure_ascii=False).encode()),
+            "budget_bytes": budget,
+            "remaining_bytes": max(0, budget - used),
+            "percent": min(100, round(used * 100 / budget)) if budget else 0,
+        }
 
     def confirm(self, key, plan_hash, **approval):
         task = self.repo.get(key)
@@ -269,37 +338,11 @@ class TerminalService:
                             "parameters": GeneratedProposal.model_json_schema(),
                         },
                     }
-                    context = planning_context()
                     messages = [
                         {
                             "role": "system",
-                            "content": "You generate command plans for a local AI terminal console. Call propose_terminal_plan. There is NO action whitelist. "
-                            "Use actual program and args for exec, or kind=shell with complete script for pipelines/redirection. "
-                            "Separate exec steps have CLOSED stdin and do not pipe output to the next step. A pipeline MUST be one shell step with its full script; never split echo/tr into exec steps. "
-                            "You can plan memory/disk/OS queries, project tests/builds/file operations or installation/network commands; explicit human review is mandatory. "
-                            "Never claim execution. No sudo/password interaction, credential access, daemon/background detachment. "
-                            "Prefer minimal noninteractive commands. On macOS physical RAM is sysctl -n hw.memsize; do not reject it. "
-                            "Do not add a second hw.physmem query on macOS; it is not a GiB conversion. Query raw capacity once, and leave unit conversion to result explanation. "
-                            "For local TCP listeners use exec lsof with args -nP -iTCP:PORT -sTCP:LISTEN -Fpcn (no networking). "
-                            "CPU model on macOS is sysctl -n machdep.cpu.brand_string; uname -m only reports architecture, so use it only when the user asks architecture. "
-                            "Provable read-only queries (e.g. uname/sw_vers/sysctl -n with known keys/pwd/ls/lsof/git status) run automatically without a click; "
-                            "only steps that may write files, change system settings, install software or use the network wait for human confirmation. "
-                            "Answer the asked fact with the fewest steps; never append extra exploratory commands. "
-                            "Read-only pipelines over local files (ls | grep -E, find, cat | grep, ps | grep, launchctl list) run without a click, so keep them free of redirection, subshells and writes. "
-                            "Use grep -E (or egrep) whenever you need alternation; a plain grep pattern is literal. "
-                            "Exit code 1 from grep/find/lsof means 'nothing matched', not an error: report it as a result, not a failure. "
-                            "Use the exact user-requested targets. Do not add operations. Use at most 4 steps. "
-                            "Do not use shell initialization or depend on secrets. Explain goal/steps in Chinese. Runtime context: "
-                            + json.dumps(context, ensure_ascii=False)
-                            + ". Installed programs live in: "
-                            + " ".join((context.get("path_dirs") or [])[:8])
-                            + "; when asked what software or databases are installed, list those dirs"
-                            " in ONE read-only step such as ls <dirs> | grep -Ei '<names>'."
-                            + "; working directory: "
-                            + str(
-                                resolve_directory(
-                                    self.state.settings.terminal_workspace, task["relative_dir"]
-                                )
+                            "content": planning_system_prompt(
+                                self.state.settings.terminal_workspace, task["relative_dir"]
                             ),
                         },
                         {"role": "user", "content": task["instruction"]},
@@ -313,7 +356,10 @@ class TerminalService:
                             f"（NUM_CTX={self.state.settings.num_ctx}）。请精简问题，或在 .env 调大 NUM_CTX"
                         )
                     recent = session_context(
-                        self.repo, task["task_id"], budget=budget - overhead - 64
+                        self.repo,
+                        task["task_id"],
+                        task.get("conversation_id"),
+                        budget=budget - overhead - 64,
                     )
                     if recent:
                         messages.insert(

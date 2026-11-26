@@ -399,3 +399,36 @@ async def test_nonzero_stops_later_steps_and_summary_failure_preserves_facts(tmp
         assert len(calls) == 1 and len(task["steps"]) == 1
         assert task["steps"][0]["exit_code"] == 2 and task["steps"][0]["stdout"] == "synthetic fact"
         assert "暂不可用" in task["summary"]
+
+
+def test_new_conversation_isolates_history_and_reports_usage(tmp_path):
+    app = create_app(config(tmp_path), PlanningModel())
+    with TestClient(app, base_url="http://127.0.0.1") as c:
+        first = c.get("/api/terminal/conversation").json()
+        assert first["conversation_id"] and first["budget_bytes"] > 0
+        assert 0 <= first["percent"] <= 100
+
+        key = c.post(
+            "/api/terminal",
+            json={"instruction": "查看目录", "conversation_id": first["conversation_id"]},
+        ).json()["task_id"]
+        assert wait(c, key, {"completed", "failed"})["status"] == "completed"
+
+        old = c.get(
+            "/api/terminal/transcript", params={"conversation_id": first["conversation_id"]}
+        ).json()["tasks"]
+        assert [t["task_id"] for t in old] == [key]
+        used = c.get(
+            "/api/terminal/conversation", params={"conversation_id": first["conversation_id"]}
+        ).json()
+        assert used["history_bytes"] > 0 and used["used_bytes"] > used["system_bytes"]
+
+        fresh = c.post("/api/terminal/conversation").json()
+        assert fresh["conversation_id"] != first["conversation_id"]
+        assert fresh["turns"] == 0 and fresh["history_bytes"] < 16
+        assert (
+            c.get(
+                "/api/terminal/transcript", params={"conversation_id": fresh["conversation_id"]}
+            ).json()["tasks"]
+            == []
+        )
