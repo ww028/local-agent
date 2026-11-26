@@ -20,7 +20,7 @@ export default function TerminalPage(){
   const stickyRef=useRef(true);
   const scroll=useCallback((force=false)=>{const el=bodyRef.current;if(el&&(force||stickyRef.current))el.scrollTop=el.scrollHeight;},[]);
   const load=useCallback(async()=>{
-    try{const data=await terminalTranscript(12);setTasks(data.tasks);setNotice('');}
+    try{const data=await terminalTranscript(30);setTasks(data.tasks);setNotice('');}
     catch(e){setNotice(e instanceof Error?e.message:'终端记录读取失败');}
   },[]);
   const anyActive=tasks.some(t=>ACTIVE.includes(t.status));

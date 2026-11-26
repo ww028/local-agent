@@ -32,7 +32,7 @@ export async function terminalCapabilities(): Promise<{workspace:string;scope:st
 export async function listTerminal(offset=0): Promise<{tasks:TerminalTask[]}> {
   return parseJson(await fetch(`/api/terminal?limit=50&offset=${offset}`));
 }
-export async function terminalTranscript(limit=12): Promise<{tasks:TerminalTask[]}> {
+export async function terminalTranscript(limit=30): Promise<{tasks:TerminalTask[]}> {
   return parseJson(await fetch(`/api/terminal/transcript?limit=${limit}`));
 }
 export async function getTerminal(id:string): Promise<TerminalTask> {
