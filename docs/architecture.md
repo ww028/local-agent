@@ -59,6 +59,15 @@ can be swapped without rewriting the RAG or agent logic.
 Vectors live in LanceDB; business records live in SQLite. The two are linked by
 document / chunk IDs.
 
+## Background jobs (planned implementation in this batch)
+
+A persisted `jobs` queue is serviced by a lifespan-owned worker, independent of
+HTTP/SSE request lifetime. Job execution shares the existing model lock, produces
+run events and durable final results. Queued work resumes on startup; previously
+running work is marked interrupted, never blindly replayed. Optional per-job
+read-only diagnostics are a separate capability, not arbitrary shell access.
+See [background-jobs-design.md](background-jobs-design.md).
+
 ## Offline boundary
 
 At runtime everything talks to `localhost`: no cloud LLM, no hosted embedding

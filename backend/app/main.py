@@ -12,12 +12,14 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.agent.executor import Executor
 from app.agent.toolbox import Tools
 from app.config import Settings, get_settings
+from app.jobs import JobService
 from app.knowledge import KnowledgeService
 from app.ollama_client import OllamaChatModel, OllamaEmbeddingModel
-from app.routes import chats, documents, models
+from app.routes import chats, documents, jobs, models
 from app.store.chats import ChatRepository
 from app.store.db import get_connection
 from app.store.documents import DocumentRepository
+from app.store.jobs import JobRepository
 from app.store.runs import RunRepository
 from app.store.vector_store import LanceDBStore
 
@@ -39,9 +41,12 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
         await app.state.knowledge.start()
         app.state.runs = RunRepository(conn)
         app.state.agent = Executor(app.state.chat_model, Tools(app.state.knowledge), app.state.runs)
+        app.state.jobs = JobService(app.state, JobRepository(conn))
+        await app.state.jobs.start()
         try:
             yield
         finally:
+            await app.state.jobs.stop()
             await app.state.knowledge.stop()
             conn.close()
 
@@ -76,6 +81,7 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
     app.include_router(models.router)
     app.include_router(chats.router)
     app.include_router(documents.router)
+    app.include_router(jobs.router)
 
     @app.get("/api/runs")
     async def list_runs(request: Request):

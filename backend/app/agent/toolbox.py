@@ -52,20 +52,33 @@ def calculate(expression: str) -> float:
     return visit(tree.body)
 
 
+class PortArgs(BaseModel):
+    port: int = Field(strict=True, ge=1, le=65535)
+
+
+class SystemArgs(BaseModel):
+    pass
+
+
 class Tools:
-    def __init__(self, knowledge):
+    def __init__(self, knowledge, *, allow_diagnostics: bool = False):
         self.knowledge = knowledge
+        self.allow_diagnostics = allow_diagnostics
         self.schemas = {
             "search_knowledge": SearchArgs,
             "read_document": ReadArgs,
             "calculator": CalculateArgs,
         }
+        if allow_diagnostics:
+            self.schemas.update({"check_port": PortArgs, "system_info": SystemArgs})
 
     def definitions(self):
         descriptions = {
             "search_knowledge": "Search imported local documents for evidence.",
             "read_document": "Read an imported document or its specific chunk, bounded to 6000 characters.",
             "calculator": "Calculate a numeric expression using + - * / ** and parentheses.",
+            "check_port": "Read-only query of local TCP listening processes for a port. Never stops processes.",
+            "system_info": "Read-only OS, CPU, memory and disk information without machine identifiers.",
         }
         return [
             {
@@ -83,6 +96,12 @@ class Tools:
         if name not in self.schemas:
             raise ValueError("Unknown tool")
         args = self.schemas[name].model_validate(arguments)
+        if name in {"check_port", "system_info"}:
+            if not self.allow_diagnostics:
+                raise ValueError("Local diagnostics are not authorized for this task")
+            from app.agent.diagnostics import check_port, system_info
+
+            return await check_port(args.port) if name == "check_port" else await system_info()
         if name == "calculator":
             return {"result": calculate(args.expression)}
         if name == "search_knowledge":

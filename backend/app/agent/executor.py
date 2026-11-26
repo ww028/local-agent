@@ -11,7 +11,7 @@ class Executor:
     def __init__(self, model, tools, runs):
         self.model, self.tools, self.runs = model, tools, runs
 
-    async def run(self, run_id, messages, model):
+    async def run(self, run_id, messages, model, *, required_tools=None):
         payload = [m.model_dump(exclude_none=True) for m in messages]
         payload[0]["content"] += (
             " You are a local tool-enabled agent. Use tools for evidence and calculations. "
@@ -35,6 +35,9 @@ class Executor:
             word in payload[-1]["content"].lower()
             for word in ("calculator", "计算工具", "用计算", "调用计算")
         )
+        required = set(required_tools or [])
+        if require_calculator:
+            required.add("calculator")
         for step in range(6):
             if time.monotonic() - started > 120:
                 raise ModelError("Agent time budget exceeded")
@@ -52,13 +55,18 @@ class Executor:
                 raise ModelError("Agent time budget exceeded") from exc
             tool_calls = response.get("tool_calls") or []
             if not tool_calls:
-                if require_calculator and "calculator" not in used_tools:
+                missing = required - used_tools
+                if missing:
                     if step == 5:
-                        raise ModelError("Required calculator tool was not executed")
+                        raise ModelError(
+                            "Required tool was not executed: " + ", ".join(sorted(missing))
+                        )
                     payload.append(
                         {
                             "role": "user",
-                            "content": "The task explicitly requires the calculator tool. Call it with the arithmetic expression before giving the final answer; do not claim tool use without a call.",
+                            "content": "The task requires successful tool use before an answer. Call these registered tools with appropriate arguments: "
+                            + ", ".join(sorted(missing))
+                            + ". Do not claim actions or machine facts without actual tool results.",
                         }
                     )
                     continue
@@ -74,7 +82,6 @@ class Executor:
                     raise ModelError("Agent tool budget exceeded")
                 function = call.get("function", {})
                 name = function.get("name", "")
-                used_tools.add(name)
                 arguments = function.get("arguments", {})
                 if isinstance(arguments, str):
                     try:
@@ -113,6 +120,8 @@ class Executor:
                     result = {"error": "Tool arguments rejected or requested evidence unavailable"}
                 except Exception:
                     result = {"error": "Local tool unavailable"}
+                if not isinstance(result, dict) or "error" not in result:
+                    used_tools.add(name)
                 if isinstance(result, dict) and result.get("chunks"):
                     for chunk in result["chunks"]:
                         if chunk["chunk_id"] not in {c["chunk_id"] for c in sources}:

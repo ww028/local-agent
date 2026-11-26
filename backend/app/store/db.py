@@ -66,9 +66,14 @@ def get_connection(settings: Settings) -> sqlite3.Connection:
         if name not in columns:
             conn.execute(f"ALTER TABLE messages ADD COLUMN {name} {declaration}")
     for table, additions in {
-        "documents": {"status": "TEXT NOT NULL DEFAULT 'pending'", "error": "TEXT",
-                      "content_hash": "TEXT", "byte_size": "INTEGER DEFAULT 0",
-                      "indexed_chunks": "INTEGER DEFAULT 0", "version": "INTEGER DEFAULT 1"},
+        "documents": {
+            "status": "TEXT NOT NULL DEFAULT 'pending'",
+            "error": "TEXT",
+            "content_hash": "TEXT",
+            "byte_size": "INTEGER DEFAULT 0",
+            "indexed_chunks": "INTEGER DEFAULT 0",
+            "version": "INTEGER DEFAULT 1",
+        },
         "chunks": {"start_line": "INTEGER DEFAULT 1", "end_line": "INTEGER DEFAULT 1"},
         "messages": {"citations": "TEXT NOT NULL DEFAULT '[]'"},
     }.items():
@@ -76,7 +81,9 @@ def get_connection(settings: Settings) -> sqlite3.Connection:
         for name, declaration in additions.items():
             if name not in columns:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
-    conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_id UNINDEXED, terms)")
+    conn.execute(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_id UNINDEXED, terms)"
+    )
     conn.execute("UPDATE documents SET status = 'pending' WHERE status = 'indexing'")
     conn.executescript("""
     CREATE TABLE IF NOT EXISTS runs (run_id TEXT PRIMARY KEY, conversation_id TEXT,
@@ -87,6 +94,18 @@ def get_connection(settings: Settings) -> sqlite3.Connection:
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
     if "run_id" not in columns:
         conn.execute("ALTER TABLE messages ADD COLUMN run_id TEXT")
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS jobs (
+      job_id TEXT PRIMARY KEY, instruction TEXT NOT NULL, model TEXT NOT NULL,
+      allow_diagnostics INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL,
+      summary TEXT, result TEXT NOT NULL DEFAULT '', error TEXT,
+      run_id TEXT, conversation_id TEXT, parent_job_id TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, started_at TEXT, finished_at TEXT);
+    CREATE INDEX IF NOT EXISTS jobs_status_created ON jobs(status,created_at);
+    """)
+    conn.execute(
+        "UPDATE jobs SET status='interrupted', error='Backend stopped during execution; retry explicitly', finished_at=CURRENT_TIMESTAMP WHERE status IN ('running','cancelling')"
+    )
     conn.execute("UPDATE runs SET status='interrupted' WHERE status='running'")
     conn.execute("UPDATE messages SET status = 'interrupted' WHERE status = 'generating'")
     conn.commit()

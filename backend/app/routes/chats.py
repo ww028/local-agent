@@ -38,6 +38,12 @@ async def delete_chat(key: str, request: Request) -> dict:
         raise HTTPException(409, "Stop generation before deleting this conversation.")
     if not state.chat_repo.get(key):
         raise HTTPException(404, "Conversation not found.")
+    if state.chat_repo._conn.execute(
+        "SELECT 1 FROM jobs WHERE conversation_id=?", (key,)
+    ).fetchone():
+        raise HTTPException(
+            409, "This conversation belongs to a persisted task and cannot be deleted here"
+        )
     state.chat_repo.delete(key)
     return {"deleted": key}
 
