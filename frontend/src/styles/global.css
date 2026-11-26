@@ -57,6 +57,13 @@ select { max-width: 300px; border: 1px solid #d7deea; border-radius: 6px; paddin
 .job-result { flex:1;min-width:0;background:white;border-radius:12px;padding:20px;overflow:auto; }
 .job-result .bubble { max-width:100%;margin:14px 0; }
 @media(max-width:800px){.job-layout{flex-direction:column;overflow:auto}.job-list{width:100%;max-height:200px;flex-shrink:0}.job-result{overflow:visible}.jobs-page{overflow:auto}}
+.terminal-plan { border:1px solid #a8bee9;background:#f5f8ff;border-radius:10px;padding:16px;margin:12px 0;overflow-wrap:anywhere; }
+.terminal-command { padding:10px 0;border-bottom:1px solid #dbe4f5; }
+.terminal-command pre,.terminal-plan details pre { white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px; }
+.confirm-command { background:#345be0;color:white;margin-top:8px; }
+.terminal-output { border:1px solid #dce4ee;border-radius:10px;padding:12px;margin:12px 0; }
+.terminal-output pre { background:#172033;color:#e5eaf5;padding:12px;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;font-size:12px; }
+.job-controls input:not([type=checkbox]) { max-width:180px;padding:7px;border:1px solid #d7deea;border-radius:6px; }
 .run-panel { margin: 8px 0; padding: 10px; background: #f1f5fb; border-radius: 8px; max-height: 240px; overflow: auto; }
 .run-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 .session-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 0; font-size: 12px; }

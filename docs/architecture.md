@@ -60,14 +60,18 @@ computer and backend process must remain running: there is no login item,
 system daemon, distributed queue or high-availability deployment. Run only one
 backend worker/instance per database. See [background-jobs-design.md](background-jobs-design.md).
 
-## Confirmed AI terminal (planned in this batch)
+## Confirmed AI terminal
 
 A separate persisted terminal task moves from model planning to awaiting confirmation.
-A backend-owned command catalog creates immutable executable/argv/cwd plans; a hash
-binds the user's confirmation to the exact version. A separate command worker executes
-only approved catalog steps with bounded output/time and no shell. Model planning and
-summary share the existing model lock; waiting for approval does not hold it. No arbitrary
-commands, scripts, network or writes in the initial scope. See [ai-terminal-design.md](ai-terminal-design.md).
+A backend-owned catalog creates immutable executable/argv/cwd/environment plans; a hash
+binds confirmation to the exact version, directory inode and executable identity.
+The command worker executes only confirmed fixed steps with bounded time/output, no shell
+and process-group cleanup. Model planning and optional summary share the model lock;
+waiting for approval never holds it. Terminal task/step records are stored in SQLite.
+Failed/cancelled/expired plans require a new task and confirmation; active work is marked
+interrupted on restart, not replayed. First scope: directory/Git status/stats/log/version,
+not arbitrary commands, scripts, networking or writes. Workspaces are not OS sandboxes.
+See [ai-terminal-design.md](ai-terminal-design.md).
 
 ## SQLite records
 

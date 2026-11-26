@@ -38,7 +38,7 @@ planning → awaiting_confirmation → queued → running → completed/failed�
 等待确认保留10分钟有效期，过期显示expired。等待用户不占模型锁或进程。
 
 计划持久化固定JSON（policy_version、goal、workspace、cwd、步骤程序/参数/描述、
-目录device/inode）；canonical SHA256绑定完整计划。确认请求携带hash，后台
+目录device/inode、可执行程序device/inode/size/mtime）；canonical SHA256绑定完整计划。确认请求携带hash，后台
 重新校验当前策略/目录/计划与期限，原子状态更新只允许一次。重复点击同一计划
 返回同一任务而不再启动进程；改计划或改目录需要新任务/新确认。模型无确认API。
 命令执行前再次核对目录、固定catalog和hash，禁止客户端传任意argv。
@@ -53,7 +53,7 @@ ignored数据库，不提交测试PID、实际文件名、用户路径或原始�
 
 asyncio.create_subprocess_exec，shell=False，固定可信程序和参数，没有zsh/bash。
 不使用模型提供PATH、环境、文件名或可执行文件。最小环境，禁用Git pager/
-fsmonitor/hooks、外部diff/textconv及全局/系统Git配置。内置Git命令仍读取项目本地
+fsmonitor/hooks、lazy fetch、外部diff/textconv及全局/系统Git配置。内置Git命令仍读取项目本地
 元数据，不能据此称完全隔离；工作区自身文件可以由外部程序变化。
 
 路径限定已配置项目；拒绝绝对路径、..、符号链接、.git/凭据等敏感子目录。
@@ -95,3 +95,11 @@ stdin=DEVNULL；macOS/Linux新进程组，取消/超时停止本任务进程组�
 网页确认后刷新可回看，原始输出与AI解释分开；真实本地模型规划与真实Git只读
 命令结果一致；离线无远端调用；现有聊天/RAG/jobs回归。声明限制：无OS沙箱认证、
 无任意shell能力、无全量命令正确率/长期生产/整机断网认证。
+
+## 7. 实施与验收状态
+
+首批已实现。后端c1aa944自测后提交，第二批为计划审核/确认/事实输出/AI解释
+网页及边界补测。66后端、16前端用例通过，真实Qwen3生成Git只读计划，确认前
+无执行，网页确认后刷新完成，原始输出与独立Git检查一致；不支持安装脚本
+请求拒绝、未确认取消与重新规划再次确认已验收。详见product-acceptance.md。
+本轮未引入额外依赖/企业资源、权重或实际运行数据。

@@ -103,6 +103,10 @@ def test_symlink_and_plan_mutation(tmp_path):
         verify_plan(tmp_path, plan, original)
     with pytest.raises(ValueError):
         verify_plan(tmp_path, plan, digest(plan))
+    identity_plan = build_plan(tmp_path, ".", {"goal": "cwd", "actions": ["show_directory"]})
+    identity_plan["steps"][0]["executable_identity"]["inode"] += 1
+    with pytest.raises(ValueError):
+        verify_plan(tmp_path, identity_plan, digest(identity_plan))
     for root in ("/", str(__import__("pathlib").Path.home())):
         with pytest.raises(ValueError):
             workspace_path(root)
@@ -262,3 +266,54 @@ def test_cancel_unconfirmed_and_queue_capacity(tmp_path):
     with pytest.raises(ValueError):
         repo.create("extra", "local", ".")
     conn.close()
+
+
+def test_directory_identity_and_git_metadata_changes(tmp_path):
+    from app.terminal.catalog import check_git_directory
+
+    folder = tmp_path / "project"
+    folder.mkdir()
+    plan = build_plan(tmp_path, "project", {"goal": "directory", "actions": ["show_directory"]})
+    folder.rename(tmp_path / "original")
+    folder.mkdir()
+    with pytest.raises(ValueError, match="变化"):
+        verify_plan(tmp_path, plan, digest(plan))
+    (folder / ".git").write_text("gitdir: ../external", encoding="utf-8")
+    with pytest.raises(ValueError):
+        check_git_directory(tmp_path, folder)
+
+
+@pytest.mark.asyncio
+async def test_nonzero_stops_later_steps_and_summary_failure_preserves_facts(tmp_path, monkeypatch):
+    from app.terminal import service
+
+    calls = []
+
+    async def failure(step, plan, output):
+        calls.append(step["action"])
+        output("synthetic fact", "synthetic error")
+        return {"status": "failed", "exit_code": 2, "error": "nonzero"}
+
+    monkeypatch.setattr(service, "execute_step", failure)
+
+    class BrokenSummary(PlanningModel):
+        async def achat(self, *args, **kwargs):
+            raise ValueError("summary unavailable")
+            yield ""
+
+    app = create_app(config(tmp_path), BrokenSummary())
+    async with app.router.lifespan_context(app):
+        plan = build_plan(
+            tmp_path, ".", {"goal": "directory", "actions": ["show_directory", "list_directory"]}
+        )
+        key = app.state.terminal.repo.create("x", "test:local", ".")["task_id"]
+        app.state.terminal.repo.save_plan(key, plan)
+        app.state.terminal.confirm(key, digest(plan))
+        for _ in range(200):
+            task = app.state.terminal.repo.get(key)
+            if task["status"] == "failed":
+                break
+            await asyncio.sleep(0.01)
+        assert len(calls) == 1 and len(task["steps"]) == 1
+        assert task["steps"][0]["exit_code"] == 2 and task["steps"][0]["stdout"] == "synthetic fact"
+        assert "暂不可用" in task["summary"]

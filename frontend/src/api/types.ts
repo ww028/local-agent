@@ -69,6 +69,18 @@ export interface Job {
   citations?: Citation[];
 }
 
+export interface TerminalPlan {
+  goal: string; cwd: string; relative_dir: string; impact: string;
+  environment: Record<string,string>;
+  steps: { action:string;description:string;executable:string;args:string[];command:string;timeout_seconds:number }[];
+}
+export interface TerminalTask {
+  task_id:string;instruction:string;status:string;model?:string;relative_dir?:string;
+  plan?:TerminalPlan|null;plan_hash?:string|null;expires_at?:string|null;confirmed_at?:string|null;
+  error?:string|null;summary?:string;created_at:string;
+  steps?:{step_index:number;status:string;stdout:string;stderr:string;exit_code:number|null;error?:string|null}[];
+}
+
 export interface DocumentPreview {
   document: DocumentMeta;
   content: string;

@@ -38,10 +38,10 @@
 - [x] Real model job + browser-refresh acceptance and regression tests.
 
 ## Phase 7 — Confirmed AI terminal
-- [ ] Immutable catalog plans, directory checks and explicit hash-bound confirmation.
-- [ ] Persistent execution/output, cancellation, expiry and restart interruption.
-- [ ] Natural-language terminal UI, plan review and separate facts/model summary.
-- [ ] Real local model/command acceptance and regression tests.
+- [x] Immutable catalog plans, directory checks and explicit hash-bound confirmation.
+- [x] Persistent execution/output, cancellation, expiry and restart interruption.
+- [x] Natural-language terminal UI, plan review and separate facts/model summary.
+- [x] Real local model/command acceptance and regression tests.
 
 ## Phase 5 — Agent & extensions
 - [x] Tool registration and bounded model → tool → observation loop.

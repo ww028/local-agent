@@ -56,6 +56,7 @@ ENV = {
     "GIT_CONFIG_GLOBAL": os.devnull,
     "GIT_TERMINAL_PROMPT": "0",
     "GIT_OPTIONAL_LOCKS": "0",
+    "GIT_NO_LAZY_FETCH": "1",
     "GIT_PAGER": "cat",
     "PAGER": "cat",
 }
@@ -152,8 +153,15 @@ def build_plan(workspace, relative, proposal):
                 "-c",
                 "color.ui=false",
             ] + args
+        executable_stat = Path(executable).stat()
         steps.append(
             {
+                "executable_identity": {
+                    "device": executable_stat.st_dev,
+                    "inode": executable_stat.st_ino,
+                    "size": executable_stat.st_size,
+                    "mtime_ns": executable_stat.st_mtime_ns,
+                },
                 "action": action,
                 "description": description,
                 "executable": executable,

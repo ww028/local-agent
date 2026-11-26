@@ -1,4 +1,4 @@
-import type { Conversation, DocumentMeta, DocumentPreview, ModelList, SavedMessage, Job } from "./types";
+import type { Conversation, DocumentMeta, DocumentPreview, ModelList, SavedMessage, Job, TerminalTask } from "./types";
 
 export async function responseError(res: Response): Promise<string> {
   try {
@@ -24,6 +24,25 @@ export async function cancelJob(id:string): Promise<Job> {
 }
 export async function retryJob(id:string): Promise<Job> {
   return parseJson(await fetch(`/api/jobs/${encodeURIComponent(id)}/retry`,{method:'POST'}));
+}
+
+export async function terminalCapabilities(): Promise<{workspace:string;scope:string;actions:{action:string;description:string}[]}> {
+  return parseJson(await fetch('/api/terminal/capabilities'));
+}
+export async function listTerminal(offset=0): Promise<{tasks:TerminalTask[]}> {
+  return parseJson(await fetch(`/api/terminal?limit=50&offset=${offset}`));
+}
+export async function getTerminal(id:string): Promise<TerminalTask> {
+  return parseJson(await fetch(`/api/terminal/${encodeURIComponent(id)}`));
+}
+export async function proposeTerminal(instruction:string,model:string,relative_dir:string): Promise<TerminalTask> {
+  return parseJson(await fetch('/api/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instruction,model,relative_dir})}));
+}
+export async function confirmTerminal(id:string,plan_hash:string): Promise<TerminalTask> {
+  return parseJson(await fetch(`/api/terminal/${encodeURIComponent(id)}/confirm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan_hash})}));
+}
+export async function cancelTerminal(id:string): Promise<TerminalTask> {
+  return parseJson(await fetch(`/api/terminal/${encodeURIComponent(id)}/cancel`,{method:'POST'}));
 }
 
 export async function getModels(): Promise<ModelList> {

@@ -25,8 +25,8 @@ class TerminalService:
         self.stopping = True
         for worker in self.workers:
             worker.cancel()
-        for task in list(self.active.values()):
-            task.cancel()
+        # Cancelling workers propagates to their awaited children. Do not cancel
+        # children twice while they are cleaning up a subprocess group.
         await asyncio.gather(*self.workers, return_exceptions=True)
 
     def submit(self, instruction, model, relative):
@@ -46,7 +46,7 @@ class TerminalService:
 
     async def cancel(self, key):
         task = self.repo.cancel(key)
-        if key in self.active:
+        if key in self.active and not self.active[key].cancelling():
             self.active[key].cancel()
         return task
 

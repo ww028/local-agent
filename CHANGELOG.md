@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Confirmed AI terminal: local-model planning into a fixed read-only catalog, immutable
+  hash-bound ten-minute approval, backend execution and separate output/model explanation.
+- Project-directory/Git-status/diff-stat/recent-log/version actions, bounded stdout/stderr,
+  exit codes, cancellation, process-group cleanup and restart interruption; no arbitrary shell.
+- Terminal plan review/history/replan UI, confirmation idempotency and security regressions.
 - Persistent background task center with service-owned worker, durable queue/results/events,
   explicit cancellation/retry and restart interruption handling independent of browser lifetime.
 - Per-job opt-in read-only TCP listener/system diagnostics with fixed commands, time/output

@@ -58,6 +58,28 @@ interrupted and are never replayed automatically. Run one backend worker only.
 Up to 32 pending/active jobs, 2,000-character instructions and 180 seconds per
 execution are supported, within the Agent's six-step/eight-tool/120-second loop.
 
+## Confirmed AI terminal
+
+Open **/terminal**. Describe a supported read-only task, review the complete command,
+working directory and impact, then click confirm. Planning never launches commands.
+Plans expire after ten minutes; changing instructions/commands/directory requires a
+new plan. Repeated confirmation does not launch duplicates. Output and exit code
+are factual records; the optional local-model summary does not replace them.
+
+The fixed catalog supports directory listing/path, Git status/diff statistics/recent
+five commits, Git/Python versions. No scripts, test execution, installation, writes,
+network, sudo or interactive input. The default workspace is this repository.
+Optionally set `TERMINAL_WORKSPACE` in the local ignored `.env` to a trusted project
+and restart. Root/home/sensitive/symlink directories are rejected. This is not OS
+isolation; untrusted repository contents are not certified safe. Git worktree external
+pointers are not supported in this first scope. macOS/Linux subprocess groups only.
+
+Each step has 30 seconds and 128KiB combined output, at most four steps; a nonzero
+exit stops later steps. Cancel affects only the launched task group and is not rollback.
+Keep the computer/backend running; page refresh/navigation does not cancel confirmed
+work. Interrupted/failed/cancelled/expired tasks can be replanned with new confirmation.
+Execution logs can contain local file names; keep the database out of Git/issues.
+
 ## Configuration and data
 
 The backend reads the repository-root `.env`, regardless of its working directory.
