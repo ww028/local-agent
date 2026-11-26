@@ -244,6 +244,7 @@ kbd { font-family:inherit; border:1px solid #c8d1e0; border-bottom-width:2px; bo
 .work-header small,.work-title small {display:block;margin-top:4px;color:#999;font-size:11px;}
 .work-header>button,.terminal-titlebar>button {border:0;font-size:23px;padding:3px;background:transparent;}
 .work-settings {position:relative;}.work-settings>summary {cursor:pointer;list-style:none;font-size:24px;}
+.work-settings:not([open]) .settings-popover {display:none;}
 .settings-popover {position:absolute;right:0;top:35px;width:340px;padding:16px;background:#fff;border:1px solid #eee;border-radius:12px;box-shadow:0 8px 30px #0002;z-index:10;}
 .messages {padding:28px 36px;gap:26px;}.bubble.assistant {background:transparent;border:0;padding:0;max-width:100%;width:100%;}
 .bubble.user {background:#303030;color:#fff;padding:10px 16px;border-radius:13px;max-width:80%;}.bubble.user p {color:#fff;}

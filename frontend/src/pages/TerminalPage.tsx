@@ -103,10 +103,7 @@ export default function TerminalPage(){
   return <section className="console-page">
     <SidebarContent><aside className="console-chats">
       <div className="console-chats-head">
-        <button type="button" className="new-row" title="开始一段新对话，上下文归零" onClick={()=>void startNew()} disabled={busy}>
-          <span className="new-row-icon">＋</span><span>新对话</span>
-        </button>
-        <span className="list-label">最近</span></details>
+        <span className="list-label">最近</span>
       </div>
       <div className="console-chats-list">
         {chats.map(item=><button key={item.conversation_id} type="button"
