@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { cancelTerminal, confirmTerminal, getModels, newTerminalConversation, proposeTerminal, terminalCapabilities, terminalConversation, terminalTranscript } from "../api/client";
-import type { TerminalTask, TerminalApproval, TerminalConversation } from "../api/types";
+import { cancelTerminal, confirmTerminal, getModels, listTerminalConversations, newTerminalConversation, proposeTerminal, terminalCapabilities, terminalConversation, terminalTranscript } from "../api/client";
+import type { TerminalTask, TerminalApproval, TerminalConversation, TerminalConversationSummary } from "../api/types";
 import TerminalEntry from "../components/TerminalEntry";
 
 const ACTIVE=['planning','queued','running','cancelling'];
@@ -17,13 +17,15 @@ export default function TerminalPage(){
   const [busy,setBusy]=useState(false);const [notice,setNotice]=useState('');
   const [history,setHistory]=useState<string[]>([]);const [historyIndex,setHistoryIndex]=useState(-1);
   const [conversationId,setConversationId]=useState('');const [conv,setConv]=useState<TerminalConversation|null>(null);
+  const [chats,setChats]=useState<TerminalConversationSummary[]>([]);
   const bodyRef=useRef<HTMLDivElement>(null);const inputRef=useRef<HTMLInputElement>(null);
   const stickyRef=useRef(true);
   const scroll=useCallback((force=false)=>{const el=bodyRef.current;if(el&&(force||stickyRef.current))el.scrollTop=el.scrollHeight;},[]);
   const load=useCallback(async()=>{
     try{const data=await terminalTranscript(30,conversationId||undefined);setTasks(data.tasks);
       const info=await terminalConversation(conversationId||undefined);
-      setConv(info);if(!conversationId)setConversationId(info.conversation_id);setNotice('');
+      setConv(info);if(!conversationId)setConversationId(info.conversation_id);
+      const list=await listTerminalConversations();setChats(list.conversations);setNotice('');
       requestAnimationFrame(()=>scroll());}
     catch(e){setNotice(e instanceof Error?e.message:'终端记录读取失败');}
   },[conversationId]);
@@ -49,9 +51,14 @@ export default function TerminalPage(){
 
   const startNew=async()=>{
     setBusy(true);
-    try{const info=await newTerminalConversation();setConversationId(info.conversation_id);setConv(info);setTasks([]);setNotice('');scroll(true);}
+    try{const info=await newTerminalConversation();setConversationId(info.conversation_id);setConv(info);setTasks([]);
+      setChats((await listTerminalConversations()).conversations);setNotice('');scroll(true);}
     catch(e){setNotice(e instanceof Error?e.message:'新开对话失败');}
     finally{setBusy(false);inputRef.current?.focus();}
+  };
+  const switchTo=async(id:string)=>{
+    if(id===conversationId||busy)return;
+    setConversationId(id);setTasks([]);setNotice('');stickyRef.current=true;
   };
   const merge=(next:TerminalTask)=>setTasks(prev=>prev.some(t=>t.task_id===next.task_id)?prev.map(t=>t.task_id===next.task_id?next:t):[...prev,next]);
   const approve=async(task:TerminalTask)=>{
@@ -91,12 +98,27 @@ export default function TerminalPage(){
     if(event.key==='ArrowUp'&&history.length){event.preventDefault();const next=historyIndex<0?history.length-1:Math.max(0,historyIndex-1);setHistoryIndex(next);setInstruction(history[next]||'');}
     if(event.key==='ArrowDown'&&historyIndex>=0){event.preventDefault();const next=historyIndex+1;if(next>=history.length){setHistoryIndex(-1);setInstruction('');}else{setHistoryIndex(next);setInstruction(history[next]||'');}}
   };
+  const convTitle=chats.find(c=>c.conversation_id===conversationId)?.title||'新对话';
   return <section className="console-page">
+    <aside className="console-chats">
+      <div className="console-chats-head">
+        <span>对话</span>
+        <button type="button" className="t-new-chat" title="开始一段新对话，上下文归零" onClick={()=>void startNew()} disabled={busy}>＋ 新对话</button>
+      </div>
+      <div className="console-chats-list">
+        {chats.map(item=><button key={item.conversation_id} type="button"
+          className={`console-chat${item.conversation_id===conversationId?' active':''}`}
+          onClick={()=>void switchTo(item.conversation_id)} title={`${item.task_count} 条记录`}>
+          <span className="console-chat-title">{item.title}</span>
+          <span className="console-chat-meta">{item.task_count} 条 · {shortTime(item.updated_at)}</span>
+        </button>)}
+        {!chats.length&&<p className="t-dim">还没有对话，直接在右侧提问开始。</p>}
+      </div>
+    </aside>
     <div className="terminal-window">
       <div className="terminal-titlebar">
         <span className="terminal-title">local-agent — zsh — 80×24</span>
         <span className="terminal-tools">
-          <button type="button" className="t-new-chat" title="清空当前上下文，开始一段新对话" onClick={()=>void startNew()} disabled={busy}>新开对话</button>
           <select aria-label="终端模型" value={model} onChange={e=>setModel(e.target.value)}>{!model&&<option value="">无模型</option>}{models.map(m=><option key={m}>{m}</option>)}</select>
           <input aria-label="终端相对目录" maxLength={240} value={directory} onChange={e=>setDirectory(e.target.value)} placeholder="相对目录"/>
         </span>
@@ -125,8 +147,42 @@ export default function TerminalPage(){
         <span>生成式命令 · 只读自动执行 · 改动才确认 · 非交互式 PTY · 计划 10 分钟有效</span>
       </footer>
     </div>
+    <aside className="console-summary">
+      <div className="summary-block">
+        <h3>上下文</h3>
+        {conv?<>
+          <div className="summary-bar"><span style={{width:`${conv.percent}%`}} className={conv.percent>85?'hot':''}/></div>
+          <p className="summary-line">{kb(conv.used_bytes)} / {kb(conv.budget_bytes)}（{conv.percent}%）</p>
+          <p className="summary-sub">固定提示 {kb(conv.system_bytes)} · 历史 {conv.turns}/{conv.raw_turns} 轮</p>
+          <p className="summary-sub">剩余 {kb(conv.remaining_bytes)}{conv.raw_history_bytes>conv.history_bytes?` · 原始历史 ${kb(conv.raw_history_bytes)}，已裁剪`:''}</p>
+        </>:<p className="summary-sub">读取中…</p>}
+      </div>
+      <div className="summary-block">
+        <h3>当前对话</h3>
+        <p className="summary-line">{convTitle}</p>
+        <p className="summary-sub">{tasks.length} 条记录 · 模型 {model||'未选择'}</p>
+        <p className="summary-sub">目录 {directory}</p>
+      </div>
+      <div className="summary-block">
+        <h3>最近执行</h3>
+        {[...tasks].reverse().slice(0,5).map(task=><div key={task.task_id} className="summary-task">
+          <span className={`summary-dot ${task.status}`}/>
+          <span className="summary-task-text">{task.instruction}</span>
+        </div>)}
+        {!tasks.length&&<p className="summary-sub">本对话还没有执行记录。</p>}
+      </div>
+      <div className="summary-block">
+        <h3>策略</h3>
+        <p className="summary-sub">只读查询直接执行；改动文件、装软件、联网需确认。计划 10 分钟内有效，最多 4 步。</p>
+      </div>
+    </aside>
   </section>;
 }
 
+function shortTime(iso:string){
+  const d=new Date(iso);const now=new Date();
+  if(d.toDateString()===now.toDateString())return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
 function kb(bytes:number){return `${(bytes/1024).toFixed(1)}K`;}
 function next_hash(task:TerminalTask){return task.plan_hash||'';}

@@ -9,7 +9,9 @@ export default function App() {
   return (
     <div className="layout">
       <aside className="sidebar">
-        <h1 className="brand">local-agent</h1>
+        <span className="brand">local-agent</span>
+        <span className="brand-sub">本地优先 · 完全离线</span>
+        <span className="side-section">工作区</span>
         <nav>
           <NavLink to="/" end>
             对话
@@ -19,6 +21,7 @@ export default function App() {
           <NavLink to="/documents">知识库</NavLink>
           <NavLink to="/runs">执行记录</NavLink>
         </nav>
+        <p className="side-foot">只连本机模型与本地索引<br/>不外发任何数据</p>
       </aside>
       <main className="content">
         <Routes>

@@ -37,6 +37,9 @@ export async function terminalTranscript(limit=30,conversation_id?:string): Prom
   if(conversation_id)q.set('conversation_id',conversation_id);
   return parseJson(await fetch(`/api/terminal/transcript?${q.toString()}`));
 }
+export async function listTerminalConversations(): Promise<{conversations:import('./types').TerminalConversationSummary[]}> {
+  return parseJson(await fetch('/api/terminal/conversations'));
+}
 export async function terminalConversation(conversation_id?:string): Promise<import('./types').TerminalConversation> {
   const q=conversation_id?`?conversation_id=${encodeURIComponent(conversation_id)}`:'';
   return parseJson(await fetch(`/api/terminal/conversation${q}`));

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- The console now has a Doubao-Work-style layout: a fixed left nav, a conversation list
+  (`GET /api/terminal/conversations`, title from the first request, count and time) that switches
+  the console back to any earlier conversation with its own transcript and context usage, and a
+  right summary panel (context bar, current conversation, latest executions, policy notes).
 - Terminal conversations: every task now belongs to a `conversation_id`, follow-up history is
   read only from that conversation, and "新开对话" (`POST /api/terminal/conversation`) starts a
   clean window instead of stacking context forever.

@@ -62,6 +62,11 @@ async def listing(
     return {"tasks": request.app.state.terminal.repo.list(limit, offset)}
 
 
+@router.get("/conversations")
+async def conversations(request: Request, limit: int = Query(30, ge=1, le=100)):
+    return {"conversations": request.app.state.terminal.repo.conversations(limit)}
+
+
 @router.get("/conversation")
 async def conversation(request: Request, conversation_id: str | None = Query(None, max_length=64)):
     """Current console conversation plus how much of the model window it occupies."""

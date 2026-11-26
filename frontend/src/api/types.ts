@@ -90,6 +90,10 @@ export interface TerminalTask {
   steps?:{step_index:number;status:string;stdout:string;stderr:string;exit_code:number|null;error?:string|null;facts?:PortFacts|null}[];
 }
 
+export interface TerminalConversationSummary {
+  conversation_id:string;title:string;task_count:number;created_at:string;updated_at:string;
+}
+
 export interface TerminalConversation {
   conversation_id:string;turns:number;raw_turns:number;used_bytes:number;system_bytes:number;
   history_bytes:number;raw_history_bytes:number;budget_bytes:number;remaining_bytes:number;percent:number;

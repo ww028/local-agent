@@ -432,3 +432,18 @@ def test_new_conversation_isolates_history_and_reports_usage(tmp_path):
             ).json()["tasks"]
             == []
         )
+
+
+def test_conversation_list_titles_from_first_request(tmp_path):
+    app = create_app(config(tmp_path), PlanningModel())
+    with TestClient(app, base_url="http://127.0.0.1") as c:
+        cid = c.get("/api/terminal/conversation").json()["conversation_id"]
+        key = c.post(
+            "/api/terminal", json={"instruction": "查看目录", "conversation_id": cid}
+        ).json()["task_id"]
+        wait(c, key, {"completed", "failed"})
+        items = c.get("/api/terminal/conversations").json()["conversations"]
+        assert len(items) == 1
+        assert items[0]["conversation_id"] == cid
+        assert items[0]["title"].startswith("查看目录")
+        assert items[0]["task_count"] == 1

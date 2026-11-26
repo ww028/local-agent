@@ -29,6 +29,39 @@ class TerminalRepository:
         ).fetchone()
         return row[0] if row else self.new_conversation()
 
+    def conversations(self, limit=30):
+        """Conversation list for the sidebar: title from the first request, newest first."""
+        rows = self.conn.execute(
+            """
+            SELECT c.conversation_id, c.created_at,
+                   (SELECT count(*) FROM terminal_tasks t
+                    WHERE t.conversation_id = c.conversation_id) AS task_count,
+                   (SELECT max(t.updated_at) FROM terminal_tasks t
+                    WHERE t.conversation_id = c.conversation_id) AS updated_at,
+                   (SELECT t.instruction FROM terminal_tasks t
+                    WHERE t.conversation_id = c.conversation_id
+                    ORDER BY t.created_at LIMIT 1) AS first_instruction
+            FROM terminal_conversations c
+            ORDER BY coalesce(updated_at, c.created_at) DESC, c.rowid DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        items = []
+        for row in rows:
+            text = (row["first_instruction"] or "").strip().replace("\n", " ")
+            title = text[:24] + ("…" if len(text) > 24 else "") if text else "新对话"
+            items.append(
+                {
+                    "conversation_id": row["conversation_id"],
+                    "title": title,
+                    "task_count": row["task_count"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"] or row["created_at"],
+                }
+            )
+        return items
+
     def has_conversation(self, key):
         return (
             self.conn.execute(
