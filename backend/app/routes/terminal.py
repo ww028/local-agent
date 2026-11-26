@@ -58,6 +58,11 @@ async def listing(
     return {"tasks": request.app.state.terminal.repo.list(limit, offset)}
 
 
+@router.get("/transcript")
+async def transcript(request: Request, limit: int = Query(20, ge=1, le=50)):
+    return {"tasks": request.app.state.terminal.repo.transcript(limit)}
+
+
 @router.get("/{key}")
 async def detail(key: str, request: Request):
     task = request.app.state.terminal.repo.get(key)

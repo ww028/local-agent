@@ -62,6 +62,18 @@ class TerminalRepository:
             )
         ]
 
+    def transcript(self, limit):
+        """Chronological recent tasks for a single console transcript view."""
+        self.expire()
+        keys = [
+            row[0]
+            for row in self.conn.execute(
+                "SELECT task_id FROM terminal_tasks ORDER BY created_at DESC, rowid DESC LIMIT ?",
+                (limit,),
+            )
+        ]
+        return [self.get(key) for key in reversed(keys)]
+
     def next(self, status):
         self.expire()
         row = self.conn.execute(

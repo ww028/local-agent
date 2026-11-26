@@ -191,7 +191,44 @@ async def test_shell_pipefail_and_relative_executable(tmp_path):
     assert result["status"] == "failed" and result["exit_code"] != 0
 
 
+def test_transcript_is_chronological_and_bounded(tmp_path):
+    app = create_app(config(tmp_path), PlanningModel())
+    with TestClient(app, base_url="http://127.0.0.1") as c:
+        keys = [
+            c.post("/api/terminal", json={"instruction": f"需求{i}"}).json()["task_id"]
+            for i in range(3)
+        ]
+        tasks = c.get("/api/terminal/transcript?limit=2").json()["tasks"]
+        assert [t["task_id"] for t in tasks] == keys[1:]
+        assert all("plan" in t and "steps" in t for t in tasks)
+        assert c.get("/api/terminal/transcript?limit=1").json()["tasks"][0]["task_id"] == keys[2]
+
+
+def test_session_context_is_untrusted_and_bounded(tmp_path):
+    from app.config import Settings
+    from app.store.db import get_connection
+    from app.store.terminal import TerminalRepository
+    from app.terminal.service import session_context
+
+    conn = get_connection(Settings(_env_file=None, data_dir=tmp_path, db_path=tmp_path / "db.sqlite"))
+    repo = TerminalRepository(conn)
+    done = repo.create("查看内存", "m", ".")
+    repo.save_plan(done["task_id"], {"steps": [{"command": "sysctl -n hw.memsize"}]})
+    repo.claim(done["task_id"])
+    repo.start_step(done["task_id"], 0)
+    repo.finish_step(done["task_id"], 0, "completed", 0)
+    repo.output(done["task_id"], 0, "x" * 5000, "")
+    repo.finish(done["task_id"], "completed", None, "")
+    current = repo.create("再看可用内存", "m", ".")
+    entries = session_context(repo, current["task_id"])
+    assert len(entries) == 1 and entries[0]["request"] == "查看内存"
+    assert entries[0]["commands"] == ["sysctl -n hw.memsize"]
+    assert len(entries[0]["output"]) <= 600
+    assert session_context(repo, current["task_id"], limit=6) == entries
+
+
 def test_requested_pipeline_cannot_be_split_into_disconnected_execs(tmp_path):
+
     with TestClient(
         create_app(config(tmp_path), PlanningModel()), base_url="http://127.0.0.1"
     ) as c:
