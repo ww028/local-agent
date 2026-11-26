@@ -80,6 +80,9 @@ async def stream_chat(request: Request, body: ChatRequest) -> StreamingResponse:
         if key and not repo.get(key):
             raise HTTPException(404, "Conversation not found.")
         model = body.model or state.settings.llm_model
+        if body.reasoning and body.mode == "agent":
+            raise HTTPException(422, "深度思考暂支持自由对话与知识库问答，Agent 模式请使用快速模式。")
+        output_budget = min(4096, state.settings.num_ctx // 2) if body.reasoning else state.settings.num_predict
         citations = []
         grounded = text
         if body.use_knowledge_base or body.mode == "knowledge":
@@ -93,7 +96,7 @@ async def stream_chat(request: Request, body: ChatRequest) -> StreamingResponse:
             chunks = []
             evidence_bytes = 0
             budget = max(
-                0, state.settings.num_ctx - state.settings.num_predict - 1800 - len(text.encode())
+                0, state.settings.num_ctx - output_budget - 1800 - len(text.encode())
             )
             for chunk in candidate_chunks:
                 required = len(chunk["text"].encode()) + len(chunk["document_title"].encode()) + 128
@@ -127,7 +130,7 @@ async def stream_chat(request: Request, body: ChatRequest) -> StreamingResponse:
                 + text
             )
         try:
-            messages = compose_chat(grounded, repo.history(key) if key else [], state.settings)
+            messages = compose_chat(grounded, repo.history(key) if key else [], state.settings, output_budget=output_budget, reasoning=body.reasoning)
         except ValueError as exc:
             raise HTTPException(413, str(exc)) from exc
         try:
@@ -170,7 +173,7 @@ async def stream_chat(request: Request, body: ChatRequest) -> StreamingResponse:
                         yield event(item.pop("type"), **item)
             else:
                 async with aclosing(
-                    state.chat_model.achat(messages, model=model, temperature=body.temperature)
+                    state.chat_model.achat(messages, model=model, temperature=body.temperature, **({"reasoning": True, "num_predict": output_budget} if body.reasoning else {}))
                 ) as stream:
                     async for token in stream:
                         if await request.is_disconnected():

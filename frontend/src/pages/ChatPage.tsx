@@ -1,3 +1,4 @@
+import SidebarContent from "../components/SidebarContent";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteChat, getChat, getModels, listChats, renameChat } from "../api/client";
 import { streamChat } from "../api/sse";
@@ -12,9 +13,17 @@ export default function ChatPage() {
   const [models, setModels] = useState<ModelList | null>(null);
   const [model, setModel] = useState("");
   const [mode,setMode] = useState<"chat"|"knowledge"|"agent">("chat");
-  const [search,setSearch] = useState("");
+  const [reasoning,setReasoning] = useState(false);
   const [temperature,setTemperature] = useState(0.3);
   const [steps,setSteps] = useState<{seq:number;kind:string;data:Record<string,unknown>}[]>([]);
+  const [menu, setMenu] = useState<{id:string; x:number; y:number} | null>(null);
+  useEffect(()=>{
+    if(!menu)return;
+    const close=()=>setMenu(null);
+    const key=(e:globalThis.KeyboardEvent)=>{if(e.key==='Escape')close();};
+    window.addEventListener('click',close);window.addEventListener('keydown',key);window.addEventListener('resize',close);window.addEventListener('scroll',close,true);
+    return()=>{window.removeEventListener('click',close);window.removeEventListener('keydown',key);window.removeEventListener('resize',close);window.removeEventListener('scroll',close,true);};
+  },[menu]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const controller = useRef<AbortController | null>(null);
@@ -75,7 +84,7 @@ export default function ChatPage() {
     const update = (fn: (message: SavedMessage) => SavedMessage) =>
       setMessages(previous => previous.map(m => m.id === assistantId ? fn(m) : m));
     try {
-      await streamChat({ message: text, model, conversation_id: key, use_knowledge_base: mode==="knowledge", mode, temperature }, event => {
+      await streamChat({ message: text, model, conversation_id: key, use_knowledge_base: mode==="knowledge", mode, temperature, reasoning: reasoning && mode!=="agent" }, event => {
         if (event.type === "meta" && event.conversation_id) {
           key = event.conversation_id; setActive(key);
           if(event.run_id) update(m=>({...m,run_id:event.run_id}));
@@ -111,19 +120,22 @@ export default function ChatPage() {
   };
 
   return <div className="workbench">
-    <aside className="history">
-      <button className="new-row" disabled={busy} onClick={() => { setActive(null); setMessages([]); setError(""); }}>
-        <span className="new-row-icon">＋</span><span>新会话</span>
-      </button>
-      <input aria-label="搜索会话" className="history-search" placeholder="搜索会话" value={search} onChange={e=>setSearch(e.target.value)} />
+    <SidebarContent><aside className="history">
       <span className="list-label">最近</span>
-      {conversations.filter(chat=>chat.title.toLowerCase().includes(search.toLowerCase())).map(chat => <div className={`history-item ${active === chat.conversation_id ? "selected" : ""}`} key={chat.conversation_id}>
+      {conversations.map(chat => <div className={`history-item ${active === chat.conversation_id ? "selected" : ""}`} key={chat.conversation_id}>
         <button disabled={busy} onClick={() => void open(chat.conversation_id)}>{chat.title}</button>
-        <button aria-label="删除会话" disabled={busy} onClick={() => void remove(chat.conversation_id)}>×</button>
+        <button className="conversation-more" aria-label="会话操作" aria-haspopup="menu" aria-expanded={menu?.id===chat.conversation_id} disabled={busy} onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setMenu(menu?.id===chat.conversation_id?null:{id:chat.conversation_id,x:Math.min(r.right,window.innerWidth-176),y:Math.min(r.bottom+4,window.innerHeight-104)});}}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="4" cy="9" r="1.3" fill="currentColor"/><circle cx="9" cy="9" r="1.3" fill="currentColor"/><circle cx="14" cy="9" r="1.3" fill="currentColor"/></svg></button>
       </div>)}
-    </aside>
+    </aside></SidebarContent>
+    {menu&&<div className="conversation-menu" role="menu" style={{left:menu.x,top:menu.y}} onClick={e=>e.stopPropagation()}>
+      <button role="menuitem" onClick={()=>{const id=menu.id;setMenu(null);const title=window.prompt('会话新名称',conversations.find(c=>c.conversation_id===id)?.title);if(title?.trim())void renameChat(id,title.trim()).then(refresh).catch(e=>setError(e.message));}}>✎ <span>重命名</span></button>
+      <button role="menuitem" className="danger" onClick={()=>{const id=menu.id;setMenu(null);void remove(id);}}>⌫ <span>删除</span></button>
+    </div>}
     <section className="chat">
-      <header className="chat-toolbar">
+      <header className="work-header">
+        <button aria-label="新开对话" disabled={busy} onClick={()=>{setActive(null);setMessages([]);setError("");}}>✎</button>
+        <div><strong>{conversations.find(c=>c.conversation_id===active)?.title || "新对话"}</strong><small>AI 生成可能有误，请核实</small></div>
+        <details className="work-settings"><summary aria-label="对话设置">···</summary><div className="settings-popover">      <div className="chat-toolbar">
         <label>本地模型 <select aria-label="本地模型" value={model} disabled={busy} onChange={e => setModel(e.target.value)}>
           {!model && <option value="">暂无可用模型</option>}
           {models?.available.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
@@ -131,12 +143,14 @@ export default function ChatPage() {
         <button disabled={busy} onClick={() => void refreshModels().catch(e => setError(e.message))}>刷新</button>
         <select aria-label="工作模式" value={mode} disabled={busy} onChange={e=>setMode(e.target.value as typeof mode)}><option value="chat">自由对话</option><option value="knowledge">知识库问答</option><option value="agent">Agent 工具</option></select>
         <span className="badge">仅本地 · 只读工具</span>
-      </header>
+      </div>
       <div className="session-toolbar">
         <label>创造性 <input aria-label="创造性" type="range" min="0" max="1" step="0.1" value={temperature} disabled={busy||mode==="agent"} onChange={e=>setTemperature(Number(e.target.value))} /> {temperature}</label>
         {active&&<button disabled={busy} onClick={()=>{const title=prompt("会话新名称",conversations.find(c=>c.conversation_id===active)?.title);if(title)void renameChat(active,title).then(refresh).catch(e=>setError(e.message));}}>重命名</button>}
         {messages.length>0&&<button disabled={busy} onClick={()=>{const content=messages.map(m=>`## ${m.role==="user"?"用户":"助手"}\n\n${m.content}`).join("\n\n");const url=URL.createObjectURL(new Blob([content],{type:"text/markdown;charset=utf-8"}));const a=document.createElement("a");a.href=url;a.download="local-agent-chat.md";a.click();URL.revokeObjectURL(url);}}>导出 Markdown</button>}
       </div>
+</div></details>
+      </header>
       {models?.status === "unavailable" && <p role="alert" className="error">{models.error}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       <div className="messages" aria-live="polite">
@@ -152,7 +166,8 @@ export default function ChatPage() {
             placeholder="发消息… / 切换工作模式" rows={2} />
           <div className="composer-bar">
             <span className="chip solid">本地电脑</span>
-            <span className="chip">{mode==="chat"?"自由对话":mode==="knowledge"?"知识库问答":"Agent 工具"}</span>
+            <button type="button" className="chip" aria-pressed={reasoning} disabled={busy||mode==="agent"} onClick={()=>setReasoning(v=>!v)}>{reasoning?"深度思考":"快速回答"}</button>
+            <select aria-label="输入区工作模式" value={mode} onChange={e=>setMode(e.target.value as typeof mode)}><option value="chat">自由对话</option><option value="knowledge">知识库问答</option><option value="agent">Agent 工具</option></select>
             <span className="chip">按需确认 · 只读工具</span>
             <span className="composer-spacer" />
             <span className="composer-model">{model || "暂无模型"}</span>
@@ -162,7 +177,7 @@ export default function ChatPage() {
         </div>
       </div>
     </section>
-    <aside className="console-summary chat-summary">
+    <aside className="console-summary chat-summary"><header className="summary-heading">对话摘要</header>
       <div className="summary-block">
         <h3>当前对话</h3>
         <p className="summary-title">{conversations.find(c=>c.conversation_id===active)?.title || "新对话"}</p>

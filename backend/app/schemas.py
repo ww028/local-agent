@@ -47,6 +47,7 @@ class DocumentMeta(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=20000)
     conversation_id: str | None = None
+    reasoning: bool = False
     use_knowledge_base: bool = False
     mode: Literal["chat", "knowledge", "agent"] = "chat"
     temperature: float | None = Field(default=None,ge=0,le=2)

@@ -13,9 +13,11 @@ def cost(text: str) -> int:
     return len(text.encode("utf-8")) + 32
 
 
-def compose_chat(text: str, history: list[ChatMessage], settings: Settings) -> list[ChatMessage]:
-    available = settings.num_ctx - settings.num_predict - 512
+def compose_chat(text: str, history: list[ChatMessage], settings: Settings, *, output_budget: int | None = None, reasoning: bool = False) -> list[ChatMessage]:
+    available = settings.num_ctx - (output_budget or settings.num_predict) - 512
     system = ChatMessage(role="system", content=SYSTEM_PROMPT)
+    if reasoning:
+        system.content += "\n严格按当前题目的目标和明确条件作答。不要套用相似题目的默认限制；在内部检查结论是否满足全部条件，最终只给结论和必要的简短解释。"
     remaining = available - cost(system.content) - cost(text)
     if remaining < 0:
         raise ValueError("Message exceeds the configured input budget. Shorten it or raise NUM_CTX.")

@@ -110,15 +110,17 @@ class OllamaChatModel:
         stream: bool = True,
         num_ctx: int | None = None,
         temperature: float | None = None,
+        reasoning: bool = False,
+        num_predict: int | None = None,
     ) -> AsyncIterator[str]:
         payload = {
             "model": model,
             "messages": [m.model_dump(exclude_none=True) for m in messages],
             "stream": stream,
-            "think": False,  # Phase 1 renders answers only, not reasoning streams.
+            "think": reasoning,  # Thinking is consumed privately; only final content is streamed.
             "options": {
                 "num_ctx": num_ctx or self._settings.num_ctx,
-                "num_predict": self._settings.num_predict,
+                "num_predict": num_predict or self._settings.num_predict,
                 **({"temperature": temperature} if temperature is not None else {}),
             },
         }
@@ -145,6 +147,8 @@ class OllamaChatModel:
                         if text:
                             yield text
                         if data.get("done"):
+                            if data.get("done_reason") == "length":
+                                raise ModelError("回答达到生成预算上限，请缩小问题范围或增加生成预算。")
                             completed = True
                             break
                     if not completed:
