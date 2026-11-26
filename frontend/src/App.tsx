@@ -39,6 +39,7 @@ export default function App() {
           <NavLink to="/documents"><Icon name="docs" /><span>知识库</span></NavLink>
           <NavLink to="/runs"><Icon name="runs" /><span>执行记录</span></NavLink>
         </nav>
+        <div id="sidebar-conversations" className="sidebar-conversations" />
         <div className="side-user">
           <span className="side-avatar">L</span>
           <span className="side-user-text"><b>本机</b><small>离线 · 无需登录</small></span>

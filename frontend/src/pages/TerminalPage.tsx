@@ -1,3 +1,4 @@
+import SidebarContent from "../components/SidebarContent";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { cancelTerminal, confirmTerminal, getModels, listTerminalConversations, newTerminalConversation, proposeTerminal, terminalCapabilities, terminalConversation, terminalTranscript } from "../api/client";
@@ -100,7 +101,7 @@ export default function TerminalPage(){
   };
   const convTitle=chats.find(c=>c.conversation_id===conversationId)?.title||'新对话';
   return <section className="console-page">
-    <aside className="console-chats">
+    <SidebarContent><aside className="console-chats">
       <div className="console-chats-head">
         <button type="button" className="new-row" title="开始一段新对话，上下文归零" onClick={()=>void startNew()} disabled={busy}>
           <span className="new-row-icon">＋</span><span>新对话</span>
@@ -116,10 +117,10 @@ export default function TerminalPage(){
         </button>)}
         {!chats.length&&<p className="t-dim">还没有对话，直接在右侧提问开始。</p>}
       </div>
-    </aside>
+    </aside></SidebarContent>
     <div className="terminal-window">
       <div className="terminal-titlebar">
-        <span className="terminal-title">local-agent — zsh — 80×24</span>
+        <button aria-label="新开终端对话" onClick={()=>void startNew()} disabled={busy}>✎</button><div className="work-title"><strong>{convTitle}</strong><small>本地 AI 终端 · 改动按需确认</small></div>
         <span className="terminal-tools">
           <select aria-label="终端模型" value={model} onChange={e=>setModel(e.target.value)}>{!model&&<option value="">无模型</option>}{models.map(m=><option key={m}>{m}</option>)}</select>
           <input aria-label="终端相对目录" maxLength={240} value={directory} onChange={e=>setDirectory(e.target.value)} placeholder="相对目录"/>
@@ -127,7 +128,7 @@ export default function TerminalPage(){
       </div>
       <div className="terminal-body" ref={bodyRef} onScroll={()=>{const el=bodyRef.current;if(el)stickyRef.current=el.scrollHeight-el.scrollTop-el.clientHeight<140;}}>
         {!tasks.length&&<div className="t-empty">
-          <p className="t-dim">Last login: {new Date().toLocaleString()} on local-agent</p>
+    
           <p>这是一个本地 AI 终端。用自然语言描述需求，AI 生成真实命令；只读查询直接执行，会改动文件或系统设置的才让你确认。</p>
           <p className="t-dim">例如：查看电脑内存 · 统计仓库文件数量 · 运行项目测试 · 检查 8092 端口</p>
         </div>}
@@ -149,7 +150,7 @@ export default function TerminalPage(){
         <span>生成式命令 · 只读自动执行 · 改动才确认 · 非交互式 PTY · 计划 10 分钟有效</span>
       </footer>
     </div>
-    <aside className="console-summary">
+    <aside className="console-summary"><header className="summary-heading">对话摘要</header>
       <div className="summary-block">
         <h3>上下文</h3>
         {conv?<>
