@@ -25,7 +25,14 @@ class PlanningModel(FakeModel):
                         "name": "propose_terminal_plan",
                         "arguments": {
                             "goal": "检查当前目录",
-                            "actions": ["show_directory", "list_directory"],
+                            "steps": [
+                                {"program": "/bin/pwd", "args": ["-P"], "description": "当前目录"},
+                                {
+                                    "program": "/bin/ls",
+                                    "args": ["-la", "."],
+                                    "description": "目录列表",
+                                },
+                            ],
                         },
                     }
                 }
@@ -64,11 +71,15 @@ def test_no_execution_before_confirmation_and_idempotency(tmp_path):
         assert (
             c.post(f"/api/terminal/{key}/confirm", json={"plan_hash": "0" * 64}).status_code == 409
         )
-        confirmed = c.post(f"/api/terminal/{key}/confirm", json={"plan_hash": planned["plan_hash"]})
+        confirmed = c.post(
+            f"/api/terminal/{key}/confirm",
+            json={"plan_hash": planned["plan_hash"], "risk_acknowledged": True},
+        )
         assert confirmed.status_code == 200
         assert (
             c.post(
-                f"/api/terminal/{key}/confirm", json={"plan_hash": planned["plan_hash"]}
+                f"/api/terminal/{key}/confirm",
+                json={"plan_hash": planned["plan_hash"], "risk_acknowledged": True},
             ).status_code
             == 200
         )
@@ -254,7 +265,8 @@ def test_cancel_unconfirmed_and_queue_capacity(tmp_path):
         assert c.post(f"/api/terminal/{key}/cancel").json()["status"] == "cancelled"
         assert (
             c.post(
-                f"/api/terminal/{key}/confirm", json={"plan_hash": planned["plan_hash"]}
+                f"/api/terminal/{key}/confirm",
+                json={"plan_hash": planned["plan_hash"], "risk_acknowledged": True},
             ).status_code
             == 409
         )

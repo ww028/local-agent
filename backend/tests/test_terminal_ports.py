@@ -22,8 +22,13 @@ class PortModel(PlanningModel):
                         "name": "propose_terminal_plan",
                         "arguments": {
                             "goal": "查询本机8092 TCP监听",
-                            "actions": ["check_port"],
-                            "port": 8092,
+                            "steps": [
+                                {
+                                    "program": "lsof",
+                                    "args": ["-nP", "-iTCP:8092", "-sTCP:LISTEN", "-Fpcn"],
+                                    "description": "本机TCP查询",
+                                }
+                            ],
                         },
                     }
                 }
@@ -89,15 +94,11 @@ def test_model_cannot_skip_or_change_port_target(tmp_path, mismatch):
     with TestClient(create_app(config(tmp_path), Wrong()), base_url="http://127.0.0.1") as c:
         key = c.post("/api/terminal", json={"instruction": "8092端口是什么服务"}).json()["task_id"]
         task = wait(c, key, {"failed"})
-        assert "无需联网" in task["error"] and "需要网络访问权限" not in task["error"]
+        assert "模型命令结构无效" in task["error"] and "需要网络访问权限" not in task["error"]
         assert not task["plan"] and not task["steps"]
 
 
 def test_unconfirmed_port_does_not_execute_and_facts_persist(tmp_path, monkeypatch):
-    with TestClient(create_app(config(tmp_path), PortModel()), base_url="http://127.0.0.1") as c:
-        invented = c.post("/api/terminal", json={"instruction": "查看项目状态"}).json()["task_id"]
-        rejected = wait(c, invented, {"failed"})
-        assert not rejected["steps"] and "猜测" in rejected["error"]
     from app.terminal import service
 
     calls = []
@@ -118,7 +119,10 @@ def test_unconfirmed_port_does_not_execute_and_facts_persist(tmp_path, monkeypat
         key = c.post("/api/terminal", json={"instruction": "8092端口是什么服务"}).json()["task_id"]
         task = wait(c, key, {"awaiting_confirmation"})
         assert calls == [] and task["steps"] == []
-        c.post(f"/api/terminal/{key}/confirm", json={"plan_hash": task["plan_hash"]})
+        c.post(
+            f"/api/terminal/{key}/confirm",
+            json={"plan_hash": task["plan_hash"], "risk_acknowledged": True},
+        )
         done = wait(c, key, {"completed"})
         assert len(calls) == 1
         assert done["steps"][0]["facts"]["port"] == 8092

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.terminal.catalog import ACTIONS
+from app.terminal.plans import POLICY
 
 router = APIRouter(prefix="/api/terminal", tags=["terminal"])
 
@@ -26,14 +26,18 @@ class Submit(BaseModel):
 class Confirm(BaseModel):
     model_config = ConfigDict(extra="forbid")
     plan_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    risk_acknowledged: bool = Field(default=False, strict=True)
+    high_risk_acknowledged: bool = Field(default=False, strict=True)
+    network_acknowledged: bool = Field(default=False, strict=True)
 
 
 @router.get("/capabilities")
 async def capabilities(request: Request):
     return {
         "workspace": str(request.app.state.settings.terminal_workspace),
-        "actions": [{"action": k, "description": v[0]} for k, v in ACTIONS.items()],
-        "scope": "仅固定只读命令；不是OS沙箱；无任意shell/写入/提权/联网/交互输入",
+        "policy_version": POLICY,
+        "actions": [],
+        "scope": "AI生成实际exec命令或完整shell脚本，审核并确认后执行；可能修改文件/联网，不是OS沙箱，不支持提权密码/交互式输入。",
     }
 
 
@@ -65,7 +69,9 @@ async def detail(key: str, request: Request):
 @router.post("/{key}/confirm")
 async def confirm(key: str, body: Confirm, request: Request):
     try:
-        return request.app.state.terminal.confirm(key, body.plan_hash)
+        return request.app.state.terminal.confirm(
+            key, body.plan_hash, **body.model_dump(exclude={"plan_hash"})
+        )
     except KeyError as exc:
         raise HTTPException(404, "终端任务不存在") from exc
     except (ValueError, OSError) as exc:

@@ -78,7 +78,7 @@ class TerminalRepository:
                 (json.dumps(plan, ensure_ascii=False), digest(plan), expiry, now(), key),
             )
 
-    def confirm(self, key, expected_hash):
+    def confirm(self, key, expected_hash, approval=None):
         task = self.get(key)
         if task is None:
             raise KeyError(key)
@@ -102,8 +102,8 @@ class TerminalRepository:
             raise ValueError("计划不能确认或已过期")
         with self.conn:
             self.conn.execute(
-                "UPDATE terminal_tasks SET status='queued',confirmed_at=?,updated_at=? WHERE task_id=? AND status='awaiting_confirmation'",
-                (now(), now(), key),
+                "UPDATE terminal_tasks SET status='queued',confirmed_at=?,updated_at=?,approval=? WHERE task_id=? AND status='awaiting_confirmation'",
+                (now(), now(), json.dumps(approval or {}), key),
             )
         return self.get(key)
 

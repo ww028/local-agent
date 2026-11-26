@@ -121,6 +121,9 @@ def get_connection(settings: Settings) -> sqlite3.Connection:
     conn.execute(
         "UPDATE terminal_tasks SET status='interrupted',error='Service stopped; replan and confirm again' WHERE status IN ('planning','running','cancelling')"
     )
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(terminal_tasks)")}
+    if "approval" not in columns:
+        conn.execute("ALTER TABLE terminal_tasks ADD COLUMN approval TEXT")
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(terminal_steps)")}
     if "facts" not in columns:
         conn.execute("ALTER TABLE terminal_steps ADD COLUMN facts TEXT")
