@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   short supplement, and raw output plus the command stay folded.
 
 ### Fixed
+- "X 版本号" requests use a deterministic read-only path: the tool is resolved against the
+  user's own toolchains (nvm default version, Volta, ~/.local/bin, ~/.cargo/bin) instead of
+  asking the model to `which` it, so `node --version` answers instantly without a click.
+- A failed step now reports the command name, exit code and first stderr line instead of a
+  generic "命令退出码非零", so the console says why nothing was executed.
 - CPU-model requests no longer answer with `uname -m` (architecture): the plan is normalized to
   `sysctl -n machdep.cpu.brand_string`.
 - The console keeps following new output when the tab is in the background, where
