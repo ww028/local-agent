@@ -1,9 +1,9 @@
-# Setup (phase 1)
+# Setup (local Agent workbench)
 
 ## Prerequisites
 
 - Python 3.11–3.14. Python 3.14 is used for local phase-1 tests; CI uses 3.12.
-  Optional RAG packages are separate and have not been validated on 3.14 yet.
+  Knowledge/LanceDB dependencies are installed by setup and tested locally on 3.14.
 - Node **20.19+ or 22.12+** (Vite 7), npm.
 - Ollama installed separately and running locally. Only installed local chat
   models are accepted; cloud stubs and embedding-only models are blocked.
@@ -19,18 +19,21 @@ bash scripts/setup.sh
 bash scripts/ollama.sh serve
 # Download a chat model while online, before offline use:
 # bash scripts/ollama.sh pull qwen3:14b
-bash scripts/dev.sh
+# After downloading models, use one-command packaged local start:
+bash scripts/start.sh
 ```
 
-Open **http://127.0.0.1:5173** (or the configured frontend port).
+Open **http://127.0.0.1:8000** (or configured BACKEND_PORT).
 Select an installed chat model, send a message, stop generation, open a saved
 conversation or create a new one. Changing models applies to the next message.
 Model selection verifies capabilities before any message is sent to Ollama.
 No weights are downloaded by `setup.sh`, the app or its model-list endpoint.
 
-The embedding model is **not required for phase 1**. Document ingestion and
-knowledge retrieval return an explicit “not implemented” response rather than
-silently falling back to ungrounded chat. Knowledge-base UI is a placeholder.
+The embedding model is required for knowledge indexing/search, but not free chat.
+Download `bge-m3` using `bash scripts/ollama.sh pull bge-m3`. Markdown/TXT upload
+returns pending/indexing/ready/error status; failures can be reindexed. The Agent
+mode exposes only imported knowledge reading/search and arithmetic calculation.
+Model steps and tool results are stored and can be reopened from a message.
 
 ## Configuration and data
 
@@ -87,5 +90,6 @@ network access or weights. For a real-model smoke test after starting services:
 The smoke test uses fictional prompts; measurements are saved in gitignored
 `data/`. Physical offline operation and broad model quality remain separate
 acceptance items.
-The Vite development server is used for the local workbench; `npm run build`
-validates assets but is not yet a packaged deployment server.
+The packaged local UI is served by FastAPI on BACKEND_PORT with its API.
+For hot-reload development use `bash scripts/dev.sh` on FRONTEND_PORT (default5173).
+Both modes remain single-user local deployments, not internet production services.

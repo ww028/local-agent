@@ -9,8 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Project scaffold: FastAPI backend, React + Vite frontend, LanceDB + SQLite storage layer.
 - Pluggable interfaces for model backend, vector store and repositories.
-- Markdown parser/chunker prototypes and ingestion interfaces (not a working RAG pipeline).
-- Agent skeleton: planner, tools, memory, executor (execution pending).
+- Markdown indexing queue, local embeddings, LanceDB/FTS5 hybrid retrieval and persisted citations.
+- Bounded model-driven Agent loop with safe calculator, local search/read tools and durable events.
+- Knowledge library upload/status/reindex/preview/delete UI.
+- Session rename/search/export, restored selection, execution inspection and temperature/mode controls.
 - Phase 1 local SSE chat with installed-model selection and SQLite history.
 - Cancellation, partial/error states, conservative context budget and local-only guards.
 - Fake-model API/adapter tests and frontend SSE regression tests.

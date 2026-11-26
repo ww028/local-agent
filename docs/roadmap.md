@@ -13,21 +13,26 @@
 - [ ] Physical network-disconnect acceptance and long-context/peak-memory profiling.
 
 ## Phase 2 — Ingestion pipeline
-- [ ] Markdown parse → structural chunk → embed → LanceDB index.
-- [ ] Document list / delete / reindex in the UI.
+- [x] Markdown parse → structural chunk → embed → LanceDB index.
+- [x] Document list / delete / reindex in the UI.
 - [ ] Reserved PDF / Word parser interfaces.
 
 ## Phase 3 — RAG QA
-- [ ] Hybrid retrieval (semantic + keyword), Top-K, citation payload.
-- [ ] Grounded prompt composition with source citations.
-- [ ] Citation cards linking back to the source chunk.
+- [x] Hybrid retrieval (semantic + keyword), Top-K, citation payload.
+- [x] Grounded prompt composition with source citations.
+- [x] Citation cards linking back to the source chunk.
 
 ## Phase 4 — Experience
-- [ ] Multi-session management, history view.
-- [ ] Markdown rendering and code highlighting.
-- [ ] Tuning controls (temperature, Top-K, knowledge-base toggle).
+- [x] Multi-session management, history view, rename/export.
+- [x] Markdown rendering.
+- [x] Code syntax highlighting / math rendering.
+- [x] Standalone execution history page and packaged local web startup.
+- [x] Synthetic 151K-character document indexing and exact recall smoke test.
+- [x] Temperature and mode controls.
+- [ ] Per-turn output-token/Top-K tuning.
 
 ## Phase 5 — Agent & extensions
-- [ ] Tool registration and think → act → observe loop.
+- [x] Tool registration and bounded model → tool → observation loop.
+- [x] Durable execution records, source cards and inspection UI.
 - [ ] Layered memory (short-term / long-term).
 - [ ] Optional: code-specialized model, multimodal, desktop shell.
