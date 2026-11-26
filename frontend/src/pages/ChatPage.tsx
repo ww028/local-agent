@@ -112,8 +112,11 @@ export default function ChatPage() {
 
   return <div className="workbench">
     <aside className="history">
-      <button disabled={busy} onClick={() => { setActive(null); setMessages([]); setError(""); }}>＋ 新会话</button>
+      <button className="new-row" disabled={busy} onClick={() => { setActive(null); setMessages([]); setError(""); }}>
+        <span className="new-row-icon">＋</span><span>新会话</span>
+      </button>
       <input aria-label="搜索会话" className="history-search" placeholder="搜索会话" value={search} onChange={e=>setSearch(e.target.value)} />
+      <span className="list-label">最近</span>
       {conversations.filter(chat=>chat.title.toLowerCase().includes(search.toLowerCase())).map(chat => <div className={`history-item ${active === chat.conversation_id ? "selected" : ""}`} key={chat.conversation_id}>
         <button disabled={busy} onClick={() => void open(chat.conversation_id)}>{chat.title}</button>
         <button aria-label="删除会话" disabled={busy} onClick={() => void remove(chat.conversation_id)}>×</button>
@@ -143,12 +146,45 @@ export default function ChatPage() {
       </div>
       {steps.length>0 && <details open className="run-panel"><summary>执行过程 · {steps.length} 个事件</summary>{steps.map(step=><div key={step.seq}><strong>{step.kind}</strong><pre>{JSON.stringify(step.data,null,2)}</pre></div>)}</details>}
       <div className="composer">
-        <textarea aria-label="消息" value={input} disabled={busy} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }}
-          placeholder="Enter 发送 · Shift+Enter 换行" rows={3} />
-        {busy ? <button onClick={() => controller.current?.abort()}>停止生成</button>
-          : <button disabled={!input.trim() || !model} onClick={() => void send()}>发送</button>}
+        <div className="composer-box">
+          <textarea aria-label="消息" value={input} disabled={busy} onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }}
+            placeholder="发消息… / 切换工作模式" rows={2} />
+          <div className="composer-bar">
+            <span className="chip solid">本地电脑</span>
+            <span className="chip">{mode==="chat"?"自由对话":mode==="knowledge"?"知识库问答":"Agent 工具"}</span>
+            <span className="chip">按需确认 · 只读工具</span>
+            <span className="composer-spacer" />
+            <span className="composer-model">{model || "暂无模型"}</span>
+            {busy ? <button className="send" onClick={() => controller.current?.abort()}>停止</button>
+              : <button className="send" disabled={!input.trim() || !model} onClick={() => void send()}>发送</button>}
+          </div>
+        </div>
       </div>
     </section>
+    <aside className="console-summary chat-summary">
+      <div className="summary-block">
+        <h3>当前对话</h3>
+        <p className="summary-title">{conversations.find(c=>c.conversation_id===active)?.title || "新对话"}</p>
+        <p className="summary-sub">{messages.length} 条消息 · {mode==="chat"?"自由对话":mode==="knowledge"?"知识库问答":"Agent 工具"}</p>
+        <p className="summary-sub">模型 {model || "—"}</p>
+      </div>
+      <div className="summary-block">
+        <h3>最近执行</h3>
+        {steps.length===0
+          ? <p className="summary-sub">本对话还没有工具执行记录。</p>
+          : <ul className="summary-steps">{steps.slice(-6).map(step=><li key={step.seq}><code>{step.kind}</code></li>)}</ul>}
+      </div>
+      <div className="summary-block">
+        <h3>对话产物</h3>
+        {messages.length>0
+          ? <button className="summary-action" disabled={busy} onClick={()=>{const content=messages.map(m=>`## ${m.role==="user"?"用户":"助手"}\n\n${m.content}`).join("\n\n");const url=URL.createObjectURL(new Blob([content],{type:"text/markdown;charset=utf-8"}));const a=document.createElement("a");a.href=url;a.download="local-agent-chat.md";a.click();URL.revokeObjectURL(url);}}>导出 Markdown</button>
+          : <p className="summary-sub">还没有内容可以导出。</p>}
+      </div>
+      <div className="summary-block">
+        <h3>策略</h3>
+        <p className="summary-sub">仅连本机模型与本地索引，不外发数据。Agent 模式下的文件改动需你确认。</p>
+      </div>
+    </aside>
   </div>;
 }

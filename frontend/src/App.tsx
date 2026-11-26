@@ -25,9 +25,13 @@ export default function App() {
   return (
     <div className="layout">
       <aside className="sidebar">
-        <span className="brand">local-agent</span>
+        <div className="brand-row">
+          <span className="brand">local-agent</span>
+          <svg className="brand-chevron" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+          <span className="brand-grow" />
+          <svg className="brand-search" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="7" cy="7" r="4.4" fill="none" stroke="currentColor" strokeWidth="1.2"/><path d="M10.3 10.3L14 14" stroke="currentColor" strokeWidth="1.2"/></svg>
+        </div>
         <span className="brand-sub">本地优先 · 完全离线</span>
-        <span className="side-section">工作区</span>
         <nav>
           <NavLink to="/" end><Icon name="chat" /><span>对话</span></NavLink>
           <NavLink to="/terminal"><Icon name="terminal" /><span>AI终端</span></NavLink>
@@ -35,7 +39,11 @@ export default function App() {
           <NavLink to="/documents"><Icon name="docs" /><span>知识库</span></NavLink>
           <NavLink to="/runs"><Icon name="runs" /><span>执行记录</span></NavLink>
         </nav>
-        <p className="side-foot">只连本机模型与本地索引<br/>不外发任何数据</p>
+        <div className="side-user">
+          <span className="side-avatar">L</span>
+          <span className="side-user-text"><b>本机</b><small>离线 · 无需登录</small></span>
+          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" strokeWidth="1.1"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4" stroke="currentColor" strokeWidth="1.1"/></svg>
+        </div>
       </aside>
       <main className="content">
         <Routes>
