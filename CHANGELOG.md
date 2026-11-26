@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- AI terminal now plans/executes confirmed local TCP port diagnostics with strict integer
+  targets and persisted facts; local lookup does not need networking. Shared lsof result
+  parsing distinguishes no visible listener from permission/warning/timeout failure.
+- Unsupported planning errors are backend-owned rather than unverified model explanations;
+  target mismatch never executes another port, existing approval bindings remain mandatory.
+
 ### Added
 - Confirmed AI terminal: local-model planning into a fixed read-only catalog, immutable
   hash-bound ten-minute approval, backend execution and separate output/model explanation.

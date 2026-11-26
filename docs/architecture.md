@@ -69,8 +69,12 @@ The command worker executes only confirmed fixed steps with bounded time/output,
 and process-group cleanup. Model planning and optional summary share the model lock;
 waiting for approval never holds it. Terminal task/step records are stored in SQLite.
 Failed/cancelled/expired plans require a new task and confirmation; active work is marked
-interrupted on restart, not replayed. First scope: directory/Git status/stats/log/version,
-not arbitrary commands, scripts, networking or writes. Workspaces are not OS sandboxes.
+interrupted on restart, not replayed. Scope: directory/Git status/stats/log/version and
+strictly parameterized local TCP listening-port queries. Job and terminal diagnostics
+share command construction/result classification; terminal still executes only the
+hash-confirmed argv. Port facts are persisted with raw output, and unsupported errors
+come from backend policy rather than model guesses. No arbitrary commands, scripts,
+networking or writes. Workspaces are not OS sandboxes.
 See [ai-terminal-design.md](ai-terminal-design.md).
 
 ## SQLite records

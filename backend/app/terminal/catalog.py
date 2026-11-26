@@ -10,7 +10,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-POLICY = "readonly-terminal-v1"
+POLICY = "readonly-terminal-v2-port"
+UNSUPPORTED = "当前请求不在AI终端支持范围：仅目录/Git/版本和本机TCP端口查询；不支持任意命令、写入、安装、脚本、联网或结束进程。"
 ACTIONS = {
     "list_directory": ("列出当前目录（含隐藏项目名）", "/bin/ls", ["-la", "."]),
     "show_directory": ("显示当前工作目录", "/bin/pwd", ["-P"]),
@@ -38,6 +39,7 @@ ACTIONS = {
         ["log", "-5", "--no-show-signature", "--format=%h %s", "--no-decorate"],
     ),
     "git_version": ("查看Git版本", "/usr/bin/git", ["--version"]),
+    "check_port": ("查询本机TCP监听端口（无需联网、不结束进程）", "", []),
     "python_version": ("查看后端Python版本", sys.executable, ["-I", "--version"]),
 }
 Action = Literal[
@@ -48,6 +50,7 @@ Action = Literal[
     "git_recent_commits",
     "git_version",
     "python_version",
+    "check_port",
 ]
 ENV = {
     "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
@@ -68,6 +71,7 @@ class Proposal(BaseModel):
     goal: str = Field(min_length=1, max_length=400)
     actions: list[Action] = Field(max_length=4)
     unsupported_reason: str = Field(default="", max_length=600)
+    port: int | None = Field(default=None, strict=True, ge=1, le=65535)
 
 
 def canonical(plan):
@@ -130,12 +134,22 @@ def check_git_directory(root, cwd):
 def build_plan(workspace, relative, proposal):
     proposal = Proposal.model_validate(proposal)
     if proposal.unsupported_reason or not proposal.actions:
-        raise ValueError(proposal.unsupported_reason or "模型未提出可执行步骤")
+        raise ValueError(UNSUPPORTED)
+    if "check_port" in proposal.actions and proposal.port is None:
+        raise ValueError("端口查询计划必须包含明确的1–65535整数端口")
+    if "check_port" not in proposal.actions and proposal.port is not None:
+        raise ValueError("端口参数只能用于本机TCP端口查询")
     root = workspace_path(workspace)
     cwd = resolve_directory(root, relative)
     steps = []
     for action in proposal.actions:
         description, executable, args = ACTIONS[action]
+        if action == "check_port":
+            from app.agent.diagnostics import port_command
+
+            command = port_command(proposal.port)
+            executable, args = command[0], command[1:]
+            description = f"查询本机{proposal.port}端口的TCP监听进程（无需联网，不结束进程）"
         if not Path(executable).is_file() or not os.access(executable, os.X_OK):
             raise ValueError("所需固定程序不可用：" + action)
         args = list(args)
@@ -167,7 +181,8 @@ def build_plan(workspace, relative, proposal):
                 "executable": executable,
                 "args": args,
                 "command": shlex.join([executable, *args]),
-                "timeout_seconds": 30,
+                "timeout_seconds": 5 if action == "check_port" else 30,
+                **({"port": proposal.port} if action == "check_port" else {}),
             }
         )
     stat = cwd.stat()
@@ -191,7 +206,11 @@ def verify_plan(workspace, plan, expected_hash):
     rebuilt = build_plan(
         workspace,
         plan["relative_dir"],
-        {"goal": plan["goal"], "actions": [s["action"] for s in plan["steps"]]},
+        {
+            "goal": plan["goal"],
+            "actions": [s["action"] for s in plan["steps"]],
+            "port": next((s["port"] for s in plan["steps"] if s["action"] == "check_port"), None),
+        },
     )
     if canonical(rebuilt) != canonical(plan):
         raise ValueError("目录、程序或策略已变化，请重新规划确认")

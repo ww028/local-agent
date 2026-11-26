@@ -58,7 +58,7 @@ async def execute_step(step, plan, on_output):
         status = "cancelled"
         raise
     except TimeoutError:
-        status, error = "failed", "命令超过30秒预算，已停止"
+        status, error = "failed", f"命令超过{step['timeout_seconds']}秒预算，已停止"
     except ValueError as exc:
         status, error = "failed", str(exc)
     finally:
@@ -79,7 +79,22 @@ async def execute_step(step, plan, on_output):
                     pass
                 await asyncio.sleep(0.05)
         await process.wait()
+    facts = None
+    if step.get("action") == "check_port" and error in {None, "命令退出码非零，后续步骤未执行"}:
+        from app.agent.diagnostics import DiagnosticError, port_result
+
+        try:
+            facts = port_result(
+                step["port"],
+                process.returncode,
+                display_text(buffers["stdout"]),
+                display_text(buffers["stderr"]),
+            )
+            status, error = "completed", None
+        except DiagnosticError as exc:
+            status, error = "failed", str(exc)
     return {
+        "facts": facts,
         "status": status,
         "exit_code": process.returncode,
         "stdout": display_text(buffers["stdout"]),

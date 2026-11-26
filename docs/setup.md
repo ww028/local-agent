@@ -67,15 +67,23 @@ new plan. Repeated confirmation does not launch duplicates. Output and exit code
 are factual records; the optional local-model summary does not replace them.
 
 The fixed catalog supports directory listing/path, Git status/diff statistics/recent
-five commits, Git/Python versions. No scripts, test execution, installation, writes,
-network, sudo or interactive input. The default workspace is this repository.
+five commits, Git/Python versions and local TCP listening-port queries. For a port request,
+state one integer port, review the exact lsof command, then confirm; no network required.
+Port facts persist separately from raw output. lsof exit 1 with no stdout/stderr means
+no visible listener, not execution failure; warnings/errors never mean a free port.
+Queries are limited to current-user-visible TCP listeners, not UDP or business identity.
+Existing failed tasks retain their historical error; replan them to use the fixed version.
+No scripts, test execution, installation, writes, network, sudo or interactive input.
+The default workspace is this repository.
 Optionally set `TERMINAL_WORKSPACE` in the local ignored `.env` to a trusted project
 and restart. Root/home/sensitive/symlink directories are rejected. This is not OS
 isolation; untrusted repository contents are not certified safe. Git worktree external
 pointers are not supported in this first scope. macOS/Linux subprocess groups only.
 
-Each step has 30 seconds and 128KiB combined output, at most four steps; a nonzero
-exit stops later steps. Cancel affects only the launched task group and is not rollback.
+Each step has 30 seconds (5 seconds for port queries) and 128KiB combined output, at most
+four steps; a failed command stops later steps. The port-query no-listener exit 1 is
+explicitly classified using stdout/stderr, while preserving its actual exit code.
+Cancel affects only the launched task group and is not rollback.
 Keep the computer/backend running; page refresh/navigation does not cancel confirmed
 work. Interrupted/failed/cancelled/expired tasks can be replanned with new confirmation.
 Execution logs can contain local file names; keep the database out of Git/issues.

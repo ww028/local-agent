@@ -20,4 +20,10 @@ describe('confirmed terminal review',()=>{
   it('keeps failed output and offers replanning instead of auto rerun',()=>{
     const html=render({status:'failed',error:'Nonzero exit'});expect(html).toContain('Nonzero exit');expect(html).toContain('重新规划');expect(html).not.toContain('确认执行以上命令');
   });
+  it('shows local port facts separately including no visible listener',()=>{
+    const html=render({status:'completed',steps:[{step_index:0,status:'completed',exit_code:1,stdout:'',stderr:'',facts:{port:8092,protocol:'TCP',listening:false,processes:[],scope:'当前用户可见范围'}}]});
+    expect(html).toContain('8092');expect(html).toContain('未发现TCP监听');expect(html).toContain('无需联网');expect(html).toContain('退出码');
+    const occupied=render({status:'completed',steps:[{step_index:0,status:'completed',exit_code:0,stdout:'',stderr:'',facts:{port:8092,protocol:'TCP',listening:true,processes:[{pid:123,process:'node',listeners:['127.0.0.1:8092']}],scope:'visible'}}]});
+    expect(occupied).toContain('node');expect(occupied).toContain('PID');expect(occupied).toContain('123');
+  });
 });

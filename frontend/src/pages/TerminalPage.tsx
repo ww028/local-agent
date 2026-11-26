@@ -40,9 +40,9 @@ export default function TerminalPage(){
   };
   return <section className="jobs-page">
     <header><h2>AI终端</h2><p>先理解和展示命令，确认后才执行。离开网页不取消已确认任务；电脑与后台需保持运行。</p></header>
-    <section className="job-submit"><textarea aria-label="终端任务指令" rows={3} maxLength={2000} value={instruction} onChange={e=>setInstruction(e.target.value)} placeholder="例如：检查这个项目的Git状态，看看哪些文件尚未提交。"/>
+    <section className="job-submit"><textarea aria-label="终端任务指令" rows={3} maxLength={2000} value={instruction} onChange={e=>setInstruction(e.target.value)} placeholder="例如：检查8092端口由哪个进程监听，或查看项目Git状态。"/>
       <div className="job-controls"><label>相对目录 <input aria-label="终端相对目录" maxLength={240} value={directory} onChange={e=>setDirectory(e.target.value)}/></label><select aria-label="终端模型" value={model} onChange={e=>setModel(e.target.value)}>{!model&&<option value="">暂无本地模型</option>}{models.map(m=><option key={m}>{m}</option>)}</select><button disabled={busy||!model||!instruction.trim()} onClick={()=>void submit()}>生成命令计划（不执行）</button></div>
-      <small>工作区：{caps?.workspace||'读取中…'}</small><details><summary>首批能力与限制</summary><p>{caps?.scope}</p><ul>{caps?.actions.map(a=><li key={a.action}>{a.description}</li>)}</ul><p>不支持任意命令、脚本、安装、写入、联网、提权和交互式输入。计划10分钟内有效。</p></details>
+      <small>工作区：{caps?.workspace||'读取中…'}</small><details><summary>首批能力与限制</summary><p>{caps?.scope}</p><ul>{caps?.actions.map(a=><li key={a.action}>{a.description}</li>)}</ul><p>本机TCP端口查询无需联网；结果限当前用户可见的监听进程。其他任意命令、脚本、安装、写入、联网、提权和交互式输入不支持。计划10分钟内有效。</p></details>
     </section>
     {error&&<p role="alert" className="error">{error}</p>}
     <div className="job-layout"><aside className="job-list">{!tasks.length&&<p className="empty">先描述需求，AI只规划，不会直接执行。</p>}{tasks.map(t=><button key={t.task_id} className={`job-item ${id===t.task_id?'selected':''}`} onClick={()=>{setParams({id:t.task_id});setTask(null);}}><strong>{t.instruction}</strong><small>{terminalLabels[t.status]||t.status}</small></button>)}<div className="job-controls"><button disabled={!offset} onClick={()=>setOffset(Math.max(0,offset-50))}>上一页</button><button disabled={tasks.length<50} onClick={()=>setOffset(offset+50)}>下一页</button></div></aside>

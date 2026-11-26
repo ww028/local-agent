@@ -15,7 +15,7 @@ export default function TerminalDetails({task,busy,onConfirm,onCancel,onReplan}:
     {["planning","awaiting_confirmation","queued","running","cancelling"].includes(task.status)&&<button disabled={busy||task.status==="cancelling"} onClick={onCancel}>{task.status==="running"?"停止本任务":"取消任务"}</button>}
     {["failed","cancelled","interrupted","expired"].includes(task.status)&&<button disabled={busy} onClick={onReplan}>按原需求重新规划（需再次确认）</button>}
     {!!task.steps?.length&&<section><h4>实际命令输出 · 事实记录</h4>{task.steps.map(step=><article className="terminal-output" key={step.step_index}><strong>步骤{step.step_index+1} · {terminalLabels[step.status]||step.status} · 退出码 {step.exit_code??"尚未结束"}</strong>
-      {step.error&&<p className="error">{step.error}</p>}<p>标准输出</p><pre>{step.stdout||"（无输出）"}</pre><p>错误输出</p><pre>{step.stderr||"（无输出）"}</pre></article>)}</section>}
+      {step.error&&<p className="error">{step.error}</p>}{step.facts&&<section className="port-facts"><h4>本机 {step.facts.port} 端口 · {step.facts.protocol} 监听查询</h4><p>{step.facts.listening?'发现可见监听进程':'当前用户可见范围未发现TCP监听'}</p>{step.facts.processes.map((p,i)=><p key={i}>进程：{p.process} · PID：{p.pid} · 地址：{p.listeners.join('、')}</p>)}<p className="badge">{step.facts.scope} · 查询无需联网</p></section>}<p>标准输出</p><pre>{step.stdout||"（无输出）"}</pre><p>错误输出</p><pre>{step.stderr||"（无输出）"}</pre></article>)}</section>}
     {task.summary&&<section><h4>AI结果解释（不替代原始输出）</h4><MessageBubble message={{id:0,role:"assistant",content:task.summary,status:"complete",model:task.model}}/></section>}
   </>;
 }

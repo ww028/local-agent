@@ -42,6 +42,7 @@
 - [x] Persistent execution/output, cancellation, expiry and restart interruption.
 - [x] Natural-language terminal UI, plan review and separate facts/model summary.
 - [x] Real local model/command acceptance and regression tests.
+- [x] Confirmed local TCP port query, persisted facts and backend-owned error messages.
 
 ## Phase 5 — Agent & extensions
 - [x] Tool registration and bounded model → tool → observation loop.

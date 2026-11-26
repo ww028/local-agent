@@ -48,6 +48,8 @@ class TerminalRepository:
                 "SELECT * FROM terminal_steps WHERE task_id=? ORDER BY step_index", (key,)
             )
         ]
+        for step in task["steps"]:
+            step["facts"] = json.loads(step["facts"]) if step.get("facts") else None
         return task
 
     def list(self, limit, offset):
@@ -147,6 +149,13 @@ class TerminalRepository:
             self.conn.execute(
                 "UPDATE terminal_steps SET stdout=?,stderr=? WHERE task_id=? AND step_index=? AND status='running'",
                 (stdout, stderr, key, index),
+            )
+
+    def save_facts(self, key, index, facts):
+        with self.conn:
+            self.conn.execute(
+                "UPDATE terminal_steps SET facts=? WHERE task_id=? AND step_index=? AND status='running'",
+                (json.dumps(facts, ensure_ascii=False), key, index),
             )
 
     def finish_step(self, key, index, status, exit_code=None, error=None):

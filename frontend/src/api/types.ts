@@ -69,6 +69,10 @@ export interface Job {
   citations?: Citation[];
 }
 
+export interface PortFacts {
+  port:number;protocol:string;listening:boolean;scope:string;
+  processes:{pid:number;process:string;listeners:string[]}[];
+}
 export interface TerminalPlan {
   goal: string; cwd: string; relative_dir: string; impact: string;
   environment: Record<string,string>;
@@ -78,7 +82,7 @@ export interface TerminalTask {
   task_id:string;instruction:string;status:string;model?:string;relative_dir?:string;
   plan?:TerminalPlan|null;plan_hash?:string|null;expires_at?:string|null;confirmed_at?:string|null;
   error?:string|null;summary?:string;created_at:string;
-  steps?:{step_index:number;status:string;stdout:string;stderr:string;exit_code:number|null;error?:string|null}[];
+  steps?:{step_index:number;status:string;stdout:string;stderr:string;exit_code:number|null;error?:string|null;facts?:PortFacts|null}[];
 }
 
 export interface DocumentPreview {

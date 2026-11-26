@@ -67,11 +67,12 @@ def parse_lsof(text: str) -> list[dict]:
     return processes
 
 
-async def check_port(port: int) -> dict:
+def port_command(port: int) -> list[str]:
+    """One fixed local query, shared by job diagnostics and confirmed terminal."""
     if type(port) is not int or not 1 <= port <= 65535:
-        raise DiagnosticError("Port must be an integer from 1 to 65535")
+        raise DiagnosticError("端口必须是1–65535的整数")
     if platform.system() not in {"Darwin", "Linux"}:
-        raise DiagnosticError("Port diagnostics currently support macOS/Linux only")
+        raise DiagnosticError("本机端口查询仅支持macOS/Linux，无需联网")
     executable = next(
         (
             p
@@ -81,35 +82,44 @@ async def check_port(port: int) -> dict:
         None,
     )
     if executable is None:
-        raise DiagnosticError("lsof is not installed; cannot determine port state")
-    code, text = await run_fixed(
-        [
-            executable,
-            "-nP",
-            f"-iTCP:{port}",
-            "-sTCP:LISTEN",
-            "-Fpcn",
-        ]
-    )
-    if code == 1 and not text.strip():
+        raise DiagnosticError("本机未安装lsof，无法查询端口；不是网络权限问题")
+    return [executable, "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fpcn"]
+
+
+def port_result(port: int, code: int, stdout: str, stderr: str = "") -> dict:
+    """No visible listener is distinct from permission/warning/query failure."""
+    if code == 1 and not stdout.strip() and not stderr.strip():
         return {
             "port": port,
             "protocol": "TCP",
             "listening": False,
             "processes": [],
-            "scope": "No visible TCP listener for the current OS user; not a UDP check",
+            "scope": "当前用户可见范围未发现TCP监听；不检测UDP，不代表业务服务状态",
         }
-    processes = parse_lsof(text)
-    # Fail closed on warnings or permissions; never report a failed lookup as free.
-    if code != 0 or not processes or any(line.startswith("lsof:") for line in text.splitlines()):
-        raise DiagnosticError("Port lookup failed or permissions limited; no reliable conclusion")
+    processes = parse_lsof(stdout)
+    allowed_fields = {"p", "c", "n", "f"}
+    malformed = any(line and line[0] not in allowed_fields for line in stdout.splitlines())
+    if (
+        code != 0
+        or stderr.strip()
+        or not processes
+        or malformed
+        or any(not p["process"] or not p["listeners"] for p in processes)
+    ):
+        raise DiagnosticError("本机端口查询失败或权限/输出受限，不能据此判断端口空闲；无需联网")
     return {
         "port": port,
         "protocol": "TCP",
         "listening": True,
         "processes": processes,
-        "scope": "Visible listening processes only; no elevated privileges used",
+        "scope": "仅当前用户可见TCP监听进程，未提权；进程名称不等于业务服务身份",
     }
+
+
+async def check_port(port: int) -> dict:
+    command = port_command(port)
+    code, text = await run_fixed(command)
+    return port_result(port, code, text)
 
 
 async def system_info() -> dict:
