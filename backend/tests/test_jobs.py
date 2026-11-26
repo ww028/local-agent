@@ -131,3 +131,93 @@ async def test_shutdown_records_interruption(tmp_path):
     conn = get_connection(config(tmp_path))
     assert JobRepository(conn).get(key)["status"] == "interrupted"
     conn.close()
+
+
+@pytest.mark.asyncio
+async def test_cancel_before_child_first_runs_is_terminal(tmp_path, monkeypatch):
+    from app import jobs
+
+    original = asyncio.create_task
+    cancelled_once = False
+
+    def schedule(coroutine, *args, **kwargs):
+        nonlocal cancelled_once
+        task = original(coroutine, *args, **kwargs)
+        if coroutine.cr_code.co_name == "_perform" and not cancelled_once:
+            cancelled_once = True
+            task.cancel()
+        return task
+
+    monkeypatch.setattr(jobs.asyncio, "create_task", schedule)
+    app = create_app(config(tmp_path), SlowModel())
+    async with app.router.lifespan_context(app):
+        key = app.state.jobs.submit("first", "test:local")["job_id"]
+        for _ in range(100):
+            if app.state.jobs.repo.get(key)["status"] == "cancelled":
+                break
+            await asyncio.sleep(0.01)
+        assert app.state.jobs.repo.get(key)["status"] == "cancelled"
+        next_key = app.state.jobs.submit("next", "test:local")["job_id"]
+        for _ in range(100):
+            if app.state.jobs.repo.get(next_key)["status"] == "completed":
+                break
+            await asyncio.sleep(0.01)
+        assert app.state.jobs.repo.get(next_key)["status"] == "completed"
+
+
+def test_queue_limit_and_terminal_result_cannot_be_overwritten(tmp_path):
+    conn = get_connection(config(tmp_path))
+    repo = JobRepository(conn)
+    keys = [repo.create("synthetic", "test:local")["job_id"] for _ in range(32)]
+    with pytest.raises(ValueError, match="full"):
+        repo.create("too many", "test:local")
+    repo.request_cancel(keys[0])
+    repo.finish(keys[0], "completed", "late result")
+    assert repo.get(keys[0])["status"] == "cancelled"
+    assert repo.get(keys[0])["result"] == ""
+    assert repo.create("available slot", "test:local")["status"] == "queued"
+    conn.close()
+
+
+def test_job_result_retains_citations(tmp_path):
+    class EvidenceModel(SlowModel):
+        count = 0
+
+        async def tool_chat(self, messages, **kwargs):
+            self.count += 1
+            if self.count == 1:
+                return {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "search_knowledge",
+                                "arguments": {"query": "fictional"},
+                            }
+                        }
+                    ],
+                }
+            return {"content": "Four retries [1]"}
+
+    async def search(*args):
+        return [
+            {
+                "document_id": "fictional",
+                "chunk_id": "one",
+                "document_title": "Demo",
+                "heading": "Demo",
+                "text": "Four retries",
+            }
+        ]
+
+    app = create_app(config(tmp_path), EvidenceModel())
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        app.state.knowledge.search = search
+        key = client.post("/api/jobs", json={"instruction": "Search fictional knowledge"}).json()[
+            "job_id"
+        ]
+        result = wait(client, key)
+        assert result["status"] == "completed"
+        assert result["citations"][0]["chunk_id"] == "one"
+        assert result["result"] == "Four retries [1]"

@@ -125,3 +125,99 @@ async def test_agent_cancellation_propagates(tmp_path):
     assert model.closed
     await iterator.aclose()
     conn.close()
+
+
+@pytest.mark.asyncio
+async def test_sources_do_not_overwrite_required_tools(tmp_path):
+    class Knowledge:
+        async def search(self, query, limit):
+            return [
+                {
+                    "document_id": "synthetic",
+                    "chunk_id": "chunk-1",
+                    "document_title": "Fictional document",
+                    "heading": "Demo",
+                    "text": "The fictional retry count is four.",
+                }
+            ]
+
+    class Model:
+        count = 0
+
+        async def tool_chat(self, messages, **kwargs):
+            self.count += 1
+            if self.count == 1:
+                return {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {"function": {"name": "search_knowledge", "arguments": {"query": "retry"}}}
+                    ],
+                }
+            if self.count == 2:
+                return {"content": "A premature answer without calculation"}
+            if self.count == 3:
+                assert "calculator" in messages[-1]["content"]
+                return {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {"function": {"name": "calculator", "arguments": {"expression": "4*73"}}}
+                    ],
+                }
+            return {"content": "292 [1]"}
+
+    conn = get_connection(Settings(_env_file=None, data_dir=tmp_path, db_path=tmp_path / "db"))
+    runs = RunRepository(conn)
+    key = runs.create("x", 1, "local")
+    events = [
+        event
+        async for event in Executor(Model(), Tools(Knowledge()), runs).run(
+            key,
+            [
+                ChatMessage(role="system", content="local"),
+                ChatMessage(role="user", content="Use calculator and search"),
+            ],
+            "local",
+        )
+    ]
+    assert events[-1]["content"] == "292 [1]"
+    assert any(event["type"] == "citation" for event in events)
+    conn.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_tool_does_not_satisfy_required_tool(tmp_path):
+    from app.ollama_client import ModelError
+
+    class Model:
+        count = 0
+
+        async def tool_chat(self, messages, **kwargs):
+            self.count += 1
+            if self.count == 1:
+                return {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {"function": {"name": "calculator", "arguments": {"expression": "1/0"}}}
+                    ],
+                }
+            return {"content": "An unsupported answer"}
+
+    conn = get_connection(Settings(_env_file=None, data_dir=tmp_path, db_path=tmp_path / "db"))
+    runs = RunRepository(conn)
+    key = runs.create("x", 1, "local")
+    with pytest.raises(ModelError, match="not executed"):
+        _ = [
+            event
+            async for event in Executor(Model(), Tools(None), runs).run(
+                key,
+                [
+                    ChatMessage(role="system", content="local"),
+                    ChatMessage(role="user", content="Use calculator"),
+                ],
+                "local",
+            )
+        ]
+    conn.close()

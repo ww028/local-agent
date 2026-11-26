@@ -109,7 +109,7 @@ def create_app(settings: Settings | None = None, chat_model=None) -> FastAPI:
 
         @app.get("/{route:path}", include_in_schema=False)
         async def web(route: str):
-            if route not in {"", "documents", "runs"}:
+            if route not in {"", "documents", "runs", "jobs"}:
                 raise HTTPException(404, "Not found")
             return FileResponse(dist / "index.html")
 

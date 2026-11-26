@@ -35,6 +35,29 @@ returns pending/indexing/ready/error status; failures can be reindexed. The Agen
 mode exposes only imported knowledge reading/search and arithmetic calculation.
 Model steps and tool results are stored and can be reopened from a message.
 
+## Background tasks
+
+Open **/jobs** from the task-center navigation. Submit an instruction and select
+an installed local model. The backend accepts it immediately, persists it in
+SQLite and executes it independently of the submitting request. The page polls
+status/results every two seconds; refresh, navigation and closing the page do
+not cancel jobs. Cancel queued/running work explicitly. Retry creates a new job
+only for failed/cancelled/interrupted work and preserves the old record.
+
+Local diagnostics are disabled by default. To ask which process listens on a
+TCP port, explicitly check the per-task diagnostic box. This exposes only
+`check_port` and `system_info`; macOS/Linux port lookup requires `lsof`. No sudo,
+arbitrary commands, process termination, GUI control or file write is exposed.
+A lookup error is not proof that a port is free. Tool facts remain in collapsed
+execution details, separately from the model answer; knowledge citations link
+back to imported documents.
+
+Keep the computer awake and backend process running. No system service or login
+item is installed. On service restart queued jobs resume; active jobs become
+interrupted and are never replayed automatically. Run one backend worker only.
+Up to 32 pending/active jobs, 2,000-character instructions and 180 seconds per
+execution are supported, within the Agent's six-step/eight-tool/120-second loop.
+
 ## Configuration and data
 
 The backend reads the repository-root `.env`, regardless of its working directory.

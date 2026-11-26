@@ -103,11 +103,11 @@ class Executor:
                         selected = []
                         used = 0
                         for chunk in result["chunks"]:
-                            required = len(json.dumps(chunk, ensure_ascii=False).encode())
-                            if used + required > max(0, remaining):
+                            chunk_bytes = len(json.dumps(chunk, ensure_ascii=False).encode())
+                            if used + chunk_bytes > max(0, remaining):
                                 break
                             selected.append(chunk)
-                            used += required
+                            used += chunk_bytes
                         result = {
                             "chunks": selected,
                             "truncated": len(selected) < len(result["chunks"]),

@@ -75,6 +75,13 @@ class JobService:
                 try:
                     await self.active_task
                 except asyncio.CancelledError:
+                    # Cancellation can arrive before the child first runs; its
+                    # finally block would not execute in that case.
+                    self.repo.finish(
+                        job["job_id"],
+                        "interrupted" if self.stopping else "cancelled",
+                        error="后台服务停止" if self.stopping else None,
+                    )
                     if self.stopping:
                         raise
                 finally:

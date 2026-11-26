@@ -50,6 +50,25 @@ export interface DocumentMeta {
   created_at: string;
   updated_at: string;
 }
+export type JobStatus = "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled" | "interrupted";
+export interface Job {
+  job_id: string;
+  instruction: string;
+  model: string;
+  allow_diagnostics: boolean;
+  status: JobStatus;
+  summary: string;
+  result?: string;
+  error?: string | null;
+  run_id?: string | null;
+  parent_job_id?: string | null;
+  created_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  events?: {seq:number;kind:string;data:Record<string,unknown>}[];
+  citations?: Citation[];
+}
+
 export interface DocumentPreview {
   document: DocumentMeta;
   content: string;

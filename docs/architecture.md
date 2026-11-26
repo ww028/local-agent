@@ -1,75 +1,85 @@
 # Architecture
 
-local-agent is a local-first workbench split into decoupled layers. The workflow
-code depends on interfaces, not concrete implementations, so a backend or store
-can be swapped without rewriting the RAG or agent logic.
+local-agent is a single-user, local-first Web workbench. Current runtime paths
+are described here; some scaffold interfaces remain reserved, not production
+features. The application is not a multi-tenant service or a security sandbox.
 
-## Layers
+## Runtime layers
 
-```
-┌──────────────────────────────────────────────────────────┐
-│ Frontend (React + Vite) — chat UI, knowledge base, citations │
-├──────────────────────────────────────────────────────────┤
-│ Backend (FastAPI)                                          │
-│  ├─ routes/      HTTP handlers, SSE streaming               │
-│  ├─ rag/         retrieval, prompt composition, QA service│
-│  ├─ ingest/      parse → chunk → embed → index              │
-│  ├─ agent/       planner, tools, memory, executor loop     │
-│  └─ store/       SQLite business records, LanceDB index   │
-├──────────────────────────────────────────────────────────┤
-│ Interfaces (app/interfaces.py)                             │
-│  ChatModel · EmbeddingModel · VectorStore                 │
-├──────────────────────────────────────────────────────────┤
-│ Local runtime: Ollama (chat + embedding models)            │
-└──────────────────────────────────────────────────────────┘
-```
-
-## Pluggable interfaces
-
-| Interface      | Default implementation | Future replacement example |
-| -------------- | ---------------------- | -------------------------- |
-| `ChatModel`    | `OllamaChatModel`      | vLLM / TGI / hosted API    |
-| `EmbeddingModel` | `OllamaEmbeddingModel` | TEI / sentence-transformers |
-| `VectorStore`  | `LanceDBStore`         | Qdrant / Milvus / Weaviate  |
+- React/TypeScript/Vite: chat, documents, background jobs and execution history.
+- FastAPI: loopback API, SSE chat and packaged static Web UI.
+- `ollama_client.py`: installed-model validation, streaming chat, structured
+  tool decisions and dense embedding calls to local Ollama only.
+- `knowledge.py` + `ingest/chunker.py`: upload validation, heading/fence-aware
+  chunking, serial indexing, status and hybrid retrieval.
+- `agent/toolbox.py` + `agent/executor.py`: registered read-only tools,
+  argument checks, bounded model/tool/observation loop and source labeling.
+- `jobs.py`: lifespan-owned worker, model-lock scheduling and task lifecycle.
+- `store/`: SQLite business records and rebuildable LanceDB vector index.
 
 ## RAG data flow
 
-1. **Ingest**: Markdown (frontmatter + body) → heading-aware chunks with overlap.
-2. **Embed**: local embedding model turns each chunk into a vector.
-3. **Index**: vectors + chunk metadata written to LanceDB; document and chunk
-   records written to SQLite.
-4. **Retrieve**: query is embedded, hybrid retrieval returns Top-K chunks,
-   optionally scoped to accessible document IDs (reserved for ACL use).
-5. **Answer**: chunks are composed into the prompt with sources; the chat model
-   streams a grounded answer; citations are returned to the frontend.
+1. UTF-8 Markdown/TXT upload → local random-ID file and SQLite document record.
+2. Heading/fence-aware chunks → local dense embeddings → LanceDB index.
+3. Query → cosine vector candidates + SQLite FTS5 English terms/Chinese bigrams.
+4. RRF fusion and ready-document filtering → bounded evidence context.
+5. Local model answer → persisted labeled citations and links to source chunks.
 
-## Agent layer
+SQLite is the document/chunk/status authority. LanceDB is a rebuildable vector
+copy, not a second independent business database. Top-K evidence retrieval does
+not guarantee full-document summarization or exhaustive cross-document review.
 
-- `planner`: break a goal into steps.
-- `tools/`: callable capabilities (knowledge search is the first tool).
-- `memory`: short-term conversation history separate from long-term facts.
-- `executor`: think → act → observe loop, registering and invoking tools.
+## Agent execution
 
-## Data model (SQLite)
+The current executor uses local Ollama tool decisions rather than a separate
+implemented planning service. Tools include imported-knowledge search/read and
+bounded arithmetic. Per-task opt-in adds `check_port` and `system_info` only.
+Successful actual tool calls satisfy explicit required-tool conditions; errors
+or a model's verbal claim of action do not. Tool outputs/document content are
+untrusted evidence, not permission grants. Sources, steps and final results are
+recorded locally. Step/tool/time/input budgets and cancellation bound execution.
 
-- `documents`: metadata, reserved `owner_id` / `tenant_id` for future ACL.
-- `chunks`: chunk text, heading, order, parent document.
-- `conversations` / `messages`: chat history.
+`agent/planner.py`, `agent/memory.py`, older `rag/`/pipeline abstractions and
+`interfaces.py` include scaffold/reserved code; their existence is not evidence
+of layered memory, separate planning, production ACLs or zero-cost backend swaps.
+Current code still depends directly on SQLite repositories and Ollama settings
+in places. Stronger interface boundaries require a future refactoring module.
 
-Vectors live in LanceDB; business records live in SQLite. The two are linked by
-document / chunk IDs.
+## Background jobs
 
-## Background jobs (planned implementation in this batch)
+Web submission → `POST /api/jobs` (202) → SQLite jobs → lifespan worker → shared
+chat-model lock → Agent loop → persisted results/events → Web two-second polling.
+The worker is not owned by an HTTP/SSE request. Leaving the page stops polling,
+not execution. Jobs waiting for the model lock remain queued. Queued cancellation
+is immediate; running cancellation stops its child task and records a terminal
+state even when cancellation arrives before the child's first scheduled step.
 
-A persisted `jobs` queue is serviced by a lifespan-owned worker, independent of
-HTTP/SSE request lifetime. Job execution shares the existing model lock, produces
-run events and durable final results. Queued work resumes on startup; previously
-running work is marked interrupted, never blindly replayed. Optional per-job
-read-only diagnostics are a separate capability, not arbitrary shell access.
-See [background-jobs-design.md](background-jobs-design.md).
+On startup queued jobs resume and abandoned running/cancelling jobs become
+interrupted. Explicit retry creates a new linked job; no blind replay. The
+computer and backend process must remain running: there is no login item,
+system daemon, distributed queue or high-availability deployment. Run only one
+backend worker/instance per database. See [background-jobs-design.md](background-jobs-design.md).
 
-## Offline boundary
+## SQLite records
 
-At runtime everything talks to `localhost`: no cloud LLM, no hosted embedding
-service, no remote vector database. Models and packages are downloaded once while
-online, then used offline.
+- `documents` / `chunks` / FTS5: uploaded metadata, chunk text and keyword index.
+- `conversations` / `messages`: history, reply state and source citations.
+- `runs` / `run_events`: durable model/tool action records.
+- `jobs`: instructions, diagnostic scope, status, timestamps, result, error and
+  related conversation/run/retry parent. Linked conversations cannot be deleted
+  via the ordinary chat endpoint. Task deletion is not implemented.
+
+## Offline and capability boundary
+
+Dependencies and weights are downloaded separately while online. Runtime model
+calls ignore environment proxies, reject non-loopback endpoints and cloud model
+stubs. The UI bundles assets locally and does not execute model HTML or load
+remote images. There are no cloud inference APIs, enterprise resources, telemetry
+or contribution collectors in the project.
+
+Diagnostic adapters use public, fixed read-only code, no shell or sudo; port
+lookup is limited to current-user-visible TCP listeners. Machine results and
+private imported documents stay in ignored local data, never repository fixtures.
+No arbitrary commands, file writes, process termination, network search,
+GUI/browser automation, authentication/tenant isolation or enterprise compliance
+certification are implemented. Basic Host/Origin checks are not a full sandbox.

@@ -49,6 +49,17 @@ async def get_job(key: str, request: Request):
         job["events"] = run["events"] if run else []
     else:
         job["events"] = []
+    job["citations"] = []
+    if job["conversation_id"]:
+        messages = request.app.state.chat_repo.messages(job["conversation_id"])
+        job["citations"] = next(
+            (
+                message["citations"]
+                for message in messages
+                if message.get("run_id") == job["run_id"]
+            ),
+            [],
+        )
     return job
 
 

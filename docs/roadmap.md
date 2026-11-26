@@ -32,10 +32,10 @@
 - [ ] Per-turn output-token/Top-K tuning.
 
 ## Phase 6 — Background task center
-- [ ] Persisted jobs, request-independent execution and bounded queue.
-- [ ] Status/results UI with cancel/retry and restart interruption handling.
-- [ ] Explicit opt-in local TCP port/system read-only diagnostics.
-- [ ] Real model job + browser-refresh acceptance and regression tests.
+- [x] Persisted jobs, request-independent execution and bounded queue.
+- [x] Status/results UI with cancel/retry and restart interruption handling.
+- [x] Explicit opt-in local TCP port/system read-only diagnostics.
+- [x] Real model job + browser-refresh acceptance and regression tests.
 
 ## Phase 5 — Agent & extensions
 - [x] Tool registration and bounded model → tool → observation loop.
