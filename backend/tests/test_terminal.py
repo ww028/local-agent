@@ -207,6 +207,26 @@ def test_expiry_cancel_and_recovery(tmp_path):
     conn.close()
 
 
+def test_terminal_conversation_rename_and_delete(tmp_path):
+    settings = config(tmp_path)
+    conn = get_connection(settings)
+    repo = TerminalRepository(conn)
+    conversation_id = repo.current_conversation()
+    task = repo.create("统计文件数量", "local", ".", conversation_id)
+    repo.start_step(task["task_id"], 0)
+    repo.finish_step(task["task_id"], 0, "completed", 0)
+    repo.finish(task["task_id"], "completed")
+
+    repo.rename_conversation(conversation_id, "文件统计")
+    conversations = repo.conversations()
+    assert any(item["conversation_id"] == conversation_id and item["title"] == "文件统计" for item in conversations)
+
+    repo.delete_conversation(conversation_id)
+    assert repo.get(task["task_id"]) is None
+    assert not any(item["conversation_id"] == conversation_id for item in repo.conversations())
+    conn.close()
+
+
 def test_model_cannot_expand_catalog(tmp_path):
     class Unsupported(PlanningModel):
         async def tool_chat(self, *args, **kwargs):

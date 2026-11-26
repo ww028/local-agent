@@ -47,6 +47,12 @@ export async function terminalConversation(conversation_id?:string): Promise<imp
 export async function newTerminalConversation(): Promise<import('./types').TerminalConversation> {
   return parseJson(await fetch('/api/terminal/conversation',{method:'POST'}));
 }
+export async function renameTerminalConversation(id:string,title:string): Promise<void> {
+  await parseJson(await fetch(`/api/terminal/conversations/${encodeURIComponent(id)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})}));
+}
+export async function deleteTerminalConversation(id:string): Promise<void> {
+  await parseJson(await fetch(`/api/terminal/conversations/${encodeURIComponent(id)}`,{method:'DELETE'}));
+}
 export async function getTerminal(id:string): Promise<TerminalTask> {
   return parseJson(await fetch(`/api/terminal/${encodeURIComponent(id)}`));
 }

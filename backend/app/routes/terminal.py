@@ -32,6 +32,11 @@ class Confirm(BaseModel):
     network_acknowledged: bool = Field(default=False, strict=True)
 
 
+class RenameConversation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=80)
+
+
 @router.get("/capabilities")
 async def capabilities(request: Request):
     return {
@@ -65,6 +70,26 @@ async def listing(
 @router.get("/conversations")
 async def conversations(request: Request, limit: int = Query(30, ge=1, le=100)):
     return {"conversations": request.app.state.terminal.repo.conversations(limit)}
+
+
+@router.patch("/conversations/{key}")
+async def rename_conversation(key: str, body: RenameConversation, request: Request):
+    try:
+        request.app.state.terminal.rename_conversation(key, body.title.strip())
+    except KeyError as exc:
+        raise HTTPException(404, "终端对话不存在") from exc
+    return {"conversation_id": key, "title": body.title.strip()}
+
+
+@router.delete("/conversations/{key}")
+async def delete_conversation(key: str, request: Request):
+    try:
+        request.app.state.terminal.delete_conversation(key)
+    except KeyError as exc:
+        raise HTTPException(404, "终端对话不存在") from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"deleted": key}
 
 
 @router.get("/conversation")

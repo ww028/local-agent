@@ -1,7 +1,7 @@
 import SidebarContent from "../components/SidebarContent";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { cancelTerminal, confirmTerminal, getModels, listTerminalConversations, newTerminalConversation, proposeTerminal, terminalCapabilities, terminalConversation, terminalTranscript } from "../api/client";
+import { cancelTerminal, confirmTerminal, deleteTerminalConversation, getModels, listTerminalConversations, newTerminalConversation, proposeTerminal, renameTerminalConversation, terminalCapabilities, terminalConversation, terminalTranscript } from "../api/client";
 import type { TerminalTask, TerminalApproval, TerminalConversation, TerminalConversationSummary } from "../api/types";
 import TerminalEntry from "../components/TerminalEntry";
 
@@ -19,6 +19,7 @@ export default function TerminalPage(){
   const [history,setHistory]=useState<string[]>([]);const [historyIndex,setHistoryIndex]=useState(-1);
   const [conversationId,setConversationId]=useState('');const [conv,setConv]=useState<TerminalConversation|null>(null);
   const [chats,setChats]=useState<TerminalConversationSummary[]>([]);
+  const [menu,setMenu]=useState<{id:string;x:number;y:number}|null>(null);
   const bodyRef=useRef<HTMLDivElement>(null);const inputRef=useRef<HTMLInputElement>(null);
   const stickyRef=useRef(true);
   const scroll=useCallback((force=false)=>{const el=bodyRef.current;if(el&&(force||stickyRef.current))el.scrollTop=el.scrollHeight;},[]);
@@ -57,9 +58,34 @@ export default function TerminalPage(){
     catch(e){setNotice(e instanceof Error?e.message:'新开对话失败');}
     finally{setBusy(false);inputRef.current?.focus();}
   };
+  useEffect(()=>{
+    if(!menu)return;
+    const close=()=>setMenu(null);
+    const key=(e:globalThis.KeyboardEvent)=>{if(e.key==='Escape')close();};
+    window.addEventListener('click',close);window.addEventListener('keydown',key);window.addEventListener('resize',close);window.addEventListener('scroll',close,true);
+    return()=>{window.removeEventListener('click',close);window.removeEventListener('keydown',key);window.removeEventListener('resize',close);window.removeEventListener('scroll',close,true);};
+  },[menu]);
   const switchTo=async(id:string)=>{
     if(id===conversationId||busy)return;
     setConversationId(id);setTasks([]);setNotice('');stickyRef.current=true;
+  };
+  const refreshChats=async()=>{
+    setChats((await listTerminalConversations()).conversations);
+  };
+  const renameChat=async(id:string)=>{
+    const title=window.prompt('会话新名称',chats.find(c=>c.conversation_id===id)?.title);
+    const trimmed=title?.trim();
+    if(!trimmed)return;
+    try{await renameTerminalConversation(id,trimmed);await refreshChats();}
+    catch(e){setNotice(e instanceof Error?e.message:'重命名失败');}
+  };
+  const removeChat=async(id:string)=>{
+    if(busy)return;
+    try{
+      await deleteTerminalConversation(id);
+      if(id===conversationId)await startNew();else await refreshChats();
+    }
+    catch(e){setNotice(e instanceof Error?e.message:'删除失败');}
   };
   const merge=(next:TerminalTask)=>setTasks(prev=>prev.some(t=>t.task_id===next.task_id)?prev.map(t=>t.task_id===next.task_id?next:t):[...prev,next]);
   const approve=async(task:TerminalTask)=>{
@@ -106,15 +132,20 @@ export default function TerminalPage(){
         <span className="list-label">最近</span>
       </div>
       <div className="console-chats-list">
-        {chats.map(item=><button key={item.conversation_id} type="button"
-          className={`console-chat${item.conversation_id===conversationId?' active':''}`}
-          onClick={()=>void switchTo(item.conversation_id)} title={`${item.task_count} 条记录`}>
-          <span className="console-chat-title">{item.title}</span>
-          <span className="console-chat-meta">{item.task_count} 条 · {shortTime(item.updated_at)}</span>
-        </button>)}
+        {chats.map(item=><div key={item.conversation_id} className={`console-chat${item.conversation_id===conversationId?' active':''}`}>
+          <button type="button" className="console-chat-open" onClick={()=>void switchTo(item.conversation_id)} title={`${item.task_count} 条记录`}>
+            <span className="console-chat-title">{item.title}</span>
+            <span className="console-chat-meta">{item.task_count} 条 · {shortTime(item.updated_at)}</span>
+          </button>
+          <button className="conversation-more" aria-label="会话操作" aria-haspopup="menu" aria-expanded={menu?.id===item.conversation_id} disabled={busy} onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setMenu(menu?.id===item.conversation_id?null:{id:item.conversation_id,x:Math.min(r.right,window.innerWidth-176),y:Math.min(r.bottom+4,window.innerHeight-104)});}}><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="4" cy="9" r="1.3" fill="currentColor"/><circle cx="9" cy="9" r="1.3" fill="currentColor"/><circle cx="14" cy="9" r="1.3" fill="currentColor"/></svg></button>
+        </div>)}
         {!chats.length&&<p className="t-dim">还没有对话，直接在右侧提问开始。</p>}
       </div>
     </aside></SidebarContent>
+    {menu&&<div className="conversation-menu" role="menu" style={{left:menu.x,top:menu.y}} onClick={e=>e.stopPropagation()}>
+      <button role="menuitem" onClick={()=>{const id=menu.id;setMenu(null);void renameChat(id);}}>✎ <span>重命名</span></button>
+      <button role="menuitem" className="danger" onClick={()=>{const id=menu.id;setMenu(null);void removeChat(id);}}>⌫ <span>删除</span></button>
+    </div>}
     <div className="terminal-window">
       <div className="terminal-titlebar">
         <button aria-label="新开终端对话" onClick={()=>void startNew()} disabled={busy}>✎</button><div className="work-title"><strong>{convTitle}</strong><small>本地 AI 终端 · 改动按需确认</small></div>

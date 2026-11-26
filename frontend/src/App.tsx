@@ -29,7 +29,6 @@ export default function App() {
           <span className="brand">local-agent</span>
           <svg className="brand-chevron" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
           <span className="brand-grow" />
-          <svg className="brand-search" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="7" cy="7" r="4.4" fill="none" stroke="currentColor" strokeWidth="1.2"/><path d="M10.3 10.3L14 14" stroke="currentColor" strokeWidth="1.2"/></svg>
         </div>
         <span className="brand-sub">本地优先 · 完全离线</span>
         <nav>

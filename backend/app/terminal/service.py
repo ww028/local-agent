@@ -240,6 +240,12 @@ class TerminalService:
     def new_conversation(self):
         return self.repo.new_conversation()
 
+    def rename_conversation(self, key, title):
+        self.repo.rename_conversation(key, title)
+
+    def delete_conversation(self, key):
+        self.repo.delete_conversation(key)
+
     def conversation_state(self, conversation_id=None):
         """How much of the model window this console conversation already holds."""
         key = conversation_id

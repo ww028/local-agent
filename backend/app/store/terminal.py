@@ -8,6 +8,7 @@ from app.store.chats import now
 from app.terminal.catalog import digest
 
 TERMINAL = {"completed", "failed", "cancelled", "interrupted", "expired"}
+ACTIVE_TERMINAL = {"planning", "awaiting_confirmation", "queued", "running", "cancelling"}
 
 
 class TerminalRepository:
@@ -30,10 +31,10 @@ class TerminalRepository:
         return row[0] if row else self.new_conversation()
 
     def conversations(self, limit=30):
-        """Conversation list for the sidebar: title from the first request, newest first."""
+        """Conversation list for the sidebar: custom title or first request, newest first."""
         rows = self.conn.execute(
             """
-            SELECT c.conversation_id, c.created_at,
+            SELECT c.conversation_id, c.title, c.created_at,
                    (SELECT count(*) FROM terminal_tasks t
                     WHERE t.conversation_id = c.conversation_id) AS task_count,
                    (SELECT max(t.updated_at) FROM terminal_tasks t
@@ -50,11 +51,11 @@ class TerminalRepository:
         items = []
         for row in rows:
             text = (row["first_instruction"] or "").strip().replace("\n", " ")
-            title = text[:24] + ("…" if len(text) > 24 else "") if text else "新对话"
+            derived = text[:24] + ("…" if len(text) > 24 else "") if text else "新对话"
             items.append(
                 {
                     "conversation_id": row["conversation_id"],
-                    "title": title,
+                    "title": (row["title"] or "").strip() or derived,
                     "task_count": row["task_count"],
                     "created_at": row["created_at"],
                     "updated_at": row["updated_at"] or row["created_at"],
@@ -69,6 +70,42 @@ class TerminalRepository:
             ).fetchone()
             is not None
         )
+
+    def rename_conversation(self, key, title):
+        if not self.has_conversation(key):
+            raise KeyError(key)
+        with self.conn:
+            self.conn.execute(
+                "UPDATE terminal_conversations SET title=? WHERE conversation_id=?",
+                (title, key),
+            )
+
+    def delete_conversation(self, key):
+        if not self.has_conversation(key):
+            raise KeyError(key)
+        active = self.conn.execute(
+            "SELECT count(*) FROM terminal_tasks WHERE conversation_id=? AND status IN (?,?,?,?,?)",
+            (key, *ACTIVE_TERMINAL),
+        ).fetchone()[0]
+        if active:
+            raise ValueError("有待处理或执行中的任务，请先取消后再删除")
+        with self.conn:
+            task_ids = [
+                row[0]
+                for row in self.conn.execute(
+                    "SELECT task_id FROM terminal_tasks WHERE conversation_id=?", (key,)
+                )
+            ]
+            if task_ids:
+                self.conn.executemany(
+                    "DELETE FROM terminal_steps WHERE task_id=?", [(task_id,) for task_id in task_ids]
+                )
+                self.conn.execute(
+                    "DELETE FROM terminal_tasks WHERE conversation_id=?", (key,)
+                )
+            self.conn.execute(
+                "DELETE FROM terminal_conversations WHERE conversation_id=?", (key,)
+            )
 
     def create(self, instruction, model, relative, conversation_id=None):
         key = uuid.uuid4().hex
