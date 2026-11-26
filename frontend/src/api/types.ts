@@ -79,13 +79,14 @@ export interface TerminalApproval {
 export interface TerminalPlan {
   policy_version?:string;goal: string; cwd: string; relative_dir: string; impact: string;
   risk?:string;warnings?:string[];requires_risk_ack?:boolean;requires_high_risk_ack?:boolean;requires_network_ack?:boolean;
+  effects?:string[];auto_run?:boolean;
   environment: Record<string,string>;
   steps: { action?:string;kind?:string;description:string;executable:string;args:string[];command:string;timeout_seconds:number;risk?:string;risk_reason?:string;may_access_network?:boolean }[];
 }
 export interface TerminalTask {
   task_id:string;instruction:string;status:string;model?:string;relative_dir?:string;
   plan?:TerminalPlan|null;plan_hash?:string|null;expires_at?:string|null;confirmed_at?:string|null;
-  error?:string|null;summary?:string;created_at:string;
+  error?:string|null;summary?:string;digest?:string|null;created_at:string;
   steps?:{step_index:number;status:string;stdout:string;stderr:string;exit_code:number|null;error?:string|null;facts?:PortFacts|null}[];
 }
 

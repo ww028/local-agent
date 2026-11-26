@@ -27,10 +27,15 @@ export default function TerminalPage(){
   const anyActive=tasks.some(t=>ACTIVE.includes(t.status));
   useEffect(()=>{void load();},[load]);
   // Follow the newest content whenever it arrives, unless the user scrolled up.
+  // Timers + ResizeObserver are used because requestAnimationFrame pauses in background tabs.
   useEffect(()=>{
-    const first=requestAnimationFrame(()=>scroll());
-    const second=requestAnimationFrame(()=>requestAnimationFrame(()=>scroll()));
-    return()=>{cancelAnimationFrame(first);cancelAnimationFrame(second);};
+    const el=bodyRef.current;if(!el)return;
+    const stick=()=>scroll();
+    stick();
+    const timers=[window.setTimeout(stick,60),window.setTimeout(stick,300)];
+    const observer=new ResizeObserver(stick);
+    observer.observe(el);
+    return()=>{timers.forEach(id=>window.clearTimeout(id));observer.disconnect();};
   },[tasks,scroll]);
   useEffect(()=>{
     if(!anyActive)return;
@@ -89,7 +94,7 @@ export default function TerminalPage(){
       <div className="terminal-body" ref={bodyRef} onScroll={()=>{const el=bodyRef.current;if(el)stickyRef.current=el.scrollHeight-el.scrollTop-el.clientHeight<140;}}>
         {!tasks.length&&<div className="t-empty">
           <p className="t-dim">Last login: {new Date().toLocaleString()} on local-agent</p>
-          <p>这是一个本地 AI 终端。用自然语言描述需求，AI 生成真实命令，你确认后才执行。</p>
+          <p>这是一个本地 AI 终端。用自然语言描述需求，AI 生成真实命令；只读查询直接执行，会改动文件或系统设置的才让你确认。</p>
           <p className="t-dim">例如：查看电脑内存 · 统计仓库文件数量 · 运行项目测试 · 检查 8092 端口</p>
         </div>}
         {tasks.map(task=><TerminalEntry key={task.task_id} task={task} busy={busy} onConfirm={()=>void approve(task)} onCancel={()=>void stop(task)} onReplan={()=>void replan(task)}/>)}
@@ -104,7 +109,7 @@ export default function TerminalPage(){
       </form>
       <footer className="terminal-foot">
         <span>{caps?.workspace||'读取工作区…'}</span>
-        <span>生成式命令 · 确认后执行 · 非交互式 PTY · 无 OS 沙箱/网络隔离 · 计划 10 分钟有效</span>
+        <span>生成式命令 · 只读自动执行 · 改动才确认 · 非交互式 PTY · 计划 10 分钟有效</span>
       </footer>
     </div>
   </section>;

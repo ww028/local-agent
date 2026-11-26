@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Read-only terminal queries run without a confirmation click: only provable read-only
+  `exec` invocations (known system programs with whitelisted arguments) are auto-approved and
+  audited as `{"auto_readonly": true}`; shell, scripts, unknown programs and anything that may
+  write files, change settings, install software or use the network still require confirmation.
+- The confirmation card now states consequences in plain language (read-only / may write or
+  overwrite files / may delete files / may install software / may change system settings / may
+  reach the network) and folds the command text under "查看即将执行的命令".
+- Terminal replies lead with a deterministic result line (architecture, RAM in GiB, CPU model,
+  macOS version, git branch/clean state) taken from real stdout; the model explanation is a
+  short supplement, and raw output plus the command stay folded.
+
+### Fixed
+- CPU-model requests no longer answer with `uname -m` (architecture): the plan is normalized to
+  `sysctl -n machdep.cpu.brand_string`.
+- The console keeps following new output when the tab is in the background, where
+  `requestAnimationFrame` is paused (timers plus ResizeObserver now drive the scroll).
 - Terminal console readability: requests and AI replies render as dialogue bubbles inside
   the terminal window; the pending decision is an amber "需要你确认才执行" card with large
   `执行 (y)` / `取消 (n)` buttons plus a hint bar above the input. Decorative traffic-light
