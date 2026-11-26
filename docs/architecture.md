@@ -60,22 +60,24 @@ computer and backend process must remain running: there is no login item,
 system daemon, distributed queue or high-availability deployment. Run only one
 backend worker/instance per database. See [background-jobs-design.md](background-jobs-design.md).
 
-## Confirmed AI terminal
+## Confirmed AI terminal V3
 
-A separate persisted terminal task moves from model planning to awaiting confirmation.
-A backend-owned catalog creates immutable executable/argv/cwd/environment plans; a hash
-binds confirmation to the exact version, directory inode and executable identity.
-The command worker executes only confirmed fixed steps with bounded time/output, no shell
-and process-group cleanup. Model planning and optional summary share the model lock;
-waiting for approval never holds it. Terminal task/step records are stored in SQLite.
-Failed/cancelled/expired plans require a new task and confirmation; active work is marked
-interrupted on restart, not replayed. Scope: directory/Git status/stats/log/version and
-strictly parameterized local TCP listening-port queries. Job and terminal diagnostics
-share command construction/result classification; terminal still executes only the
-hash-confirmed argv. Port facts are persisted with raw output, and unsupported errors
-come from backend policy rather than model guesses. No arbitrary commands, scripts,
-networking or writes. Workspaces are not OS sandboxes.
-See [ai-terminal-design.md](ai-terminal-design.md).
+New tasks use `terminal/plans.py`: the model generates actual exec program/arguments
+or a full shell script, not a functional action enum. The backend resolves programs,
+binds directory/executable identity and exact content to an immutable plan hash. Scripts
+run via a fixed bash launcher with no initialization files and pipefail; exec avoids shell.
+
+All plans require explicit current-account/no-sandbox acknowledgement. Potential code/
+file effects and network access require additional acknowledgements persisted with approval.
+Warnings are heuristic, not an isolation boundary: arbitrary commands can access the user's
+files/network beyond their initial cwd. No sudo/password or interactive PTY is provided.
+Each step is bounded to 300 seconds/128KiB; process-group cleanup, cancel and restart records
+remain. Failed commands are not repaired/rerun without a new plan and confirmation.
+
+Legacy catalog records remain readable; new plans never depend on those action enums.
+Recognized exact local lsof results retain structured port facts. Sysctl physical-memory
+output has deterministic GiB/GB formatting; other summaries remain model interpretations.
+See [generative-terminal-design.md](generative-terminal-design.md).
 
 ## SQLite records
 
@@ -97,6 +99,7 @@ or contribution collectors in the project.
 Diagnostic adapters use public, fixed read-only code, no shell or sudo; port
 lookup is limited to current-user-visible TCP listeners. Machine results and
 private imported documents stay in ignored local data, never repository fixtures.
-No arbitrary commands, file writes, process termination, network search,
-GUI/browser automation, authentication/tenant isolation or enterprise compliance
-certification are implemented. Basic Host/Origin checks are not a full sandbox.
+The confirmed terminal is the exception to read-only job tools: it can execute reviewed
+commands/scripts, modify files and access network if authorized. No GUI/browser automation,
+tenant authentication/isolation or enterprise compliance certification is provided. Basic
+Host/Origin checks and risk confirmations are not OS/file/network isolation.

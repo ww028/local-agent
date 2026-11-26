@@ -26,4 +26,8 @@ describe('confirmed terminal review',()=>{
     const occupied=render({status:'completed',steps:[{step_index:0,status:'completed',exit_code:0,stdout:'',stderr:'',facts:{port:8092,protocol:'TCP',listening:true,processes:[{pid:123,process:'node',listeners:['127.0.0.1:8092']}],scope:'visible'}}]});
     expect(occupied).toContain('node');expect(occupied).toContain('PID');expect(occupied).toContain('123');
   });
+  it('requires generated risk and network review before enabling execution',()=>{
+    const html=render({plan:{...base.plan!,policy_version:'generated-terminal-v3',requires_risk_ack:true,requires_high_risk_ack:true,requires_network_ack:true,warnings:['无OS沙箱'],steps:[{kind:'shell',description:'write',executable:'/bin/bash',args:[],command:'printf synthetic > output.txt',timeout_seconds:30,risk:'high',risk_reason:'可能修改文件',may_access_network:true}]}});
+    expect(html).toContain('确认账号权限与无沙箱');expect(html).toContain('确认高风险影响');expect(html).toContain('确认可能联网');expect(html).toContain('disabled=""');expect(html).toContain('printf synthetic');
+  });
 });

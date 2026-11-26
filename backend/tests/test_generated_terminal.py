@@ -153,3 +153,50 @@ async def test_generated_without_saved_approval_never_executes(tmp_path):
             await asyncio.sleep(0.01)
         assert task["status"] == "failed" and task["steps"] == []
         assert "账号权限" in task["error"]
+
+
+def test_memory_unit_explanation_is_deterministic():
+    from app.terminal.service import memory_summary
+
+    plan = {"steps": [{"executable": "/usr/sbin/sysctl", "args": ["-n", "hw.memsize"]}]}
+    text = memory_summary(plan, [{"exit_code": 0, "stdout": "51539607552\n"}])
+    assert "48 GiB" in text and "51.54 GB" in text
+    assert memory_summary(plan, [{"exit_code": 1, "stdout": "51539607552"}]) is None
+
+
+@pytest.mark.asyncio
+async def test_shell_pipefail_and_relative_executable(tmp_path):
+    script = tmp_path / "demo.sh"
+    script.write_text("#!/bin/sh\nprintf 'relative-ok\\n'\n")
+    script.chmod(0o700)
+    plan = build_generated(
+        tmp_path,
+        ".",
+        {"goal": "relative", "steps": [{"program": "./demo.sh", "description": "synthetic"}]},
+    )
+    assert verify_generated(tmp_path, plan, digest(plan)) == plan
+    result = await execute_step(plan["steps"][0], plan, lambda out, err: None)
+    assert result["stdout"] == "relative-ok\n"
+    piped = build_generated(
+        tmp_path,
+        ".",
+        {
+            "goal": "pipefail",
+            "steps": [
+                {"kind": "shell", "script": "false | cat", "description": "synthetic failure"}
+            ],
+        },
+    )
+    result = await execute_step(piped["steps"][0], piped, lambda out, err: None)
+    assert result["status"] == "failed" and result["exit_code"] != 0
+
+
+def test_requested_pipeline_cannot_be_split_into_disconnected_execs(tmp_path):
+    with TestClient(
+        create_app(config(tmp_path), PlanningModel()), base_url="http://127.0.0.1"
+    ) as c:
+        key = c.post("/api/terminal", json={"instruction": "通过管道输出合成结果"}).json()[
+            "task_id"
+        ]
+        task = wait(c, key, {"failed"})
+        assert "管道" in task["error"] and not task["steps"]

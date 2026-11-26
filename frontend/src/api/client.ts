@@ -38,8 +38,8 @@ export async function getTerminal(id:string): Promise<TerminalTask> {
 export async function proposeTerminal(instruction:string,model:string,relative_dir:string): Promise<TerminalTask> {
   return parseJson(await fetch('/api/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instruction,model,relative_dir})}));
 }
-export async function confirmTerminal(id:string,plan_hash:string): Promise<TerminalTask> {
-  return parseJson(await fetch(`/api/terminal/${encodeURIComponent(id)}/confirm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan_hash})}));
+export async function confirmTerminal(id:string,plan_hash:string,approval?:import('./types').TerminalApproval): Promise<TerminalTask> {
+  return parseJson(await fetch(`/api/terminal/${encodeURIComponent(id)}/confirm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan_hash,...approval})}));
 }
 export async function cancelTerminal(id:string): Promise<TerminalTask> {
   return parseJson(await fetch(`/api/terminal/${encodeURIComponent(id)}/cancel`,{method:'POST'}));

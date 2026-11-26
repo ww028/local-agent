@@ -57,7 +57,11 @@ class GeneratedProposal(BaseModel):
     unsupported_reason: str = Field(default="", max_length=600)
 
 
-def executable(program):
+def executable(program, cwd=None):
+    expanded = Path(program).expanduser()
+    if cwd is not None and not expanded.is_absolute() and "/" in program:
+        expanded = Path(cwd) / expanded
+        program = str(expanded)
     if any(c.isspace() for c in program) and not Path(program).is_absolute():
         raise ValueError("program只能是程序名，命令参数应放在args")
     candidate = (
@@ -118,15 +122,20 @@ def build_generated(workspace, relative, proposal):
             raise ValueError("不能通过AI终端操作凭据目录；请移除该步骤")
         if item.kind == "shell":
             path = executable("/bin/bash")
-            args = ["--noprofile", "--norc", "-c", item.script]
+            args = ["--noprofile", "--norc", "-o", "pipefail", "-c", item.script]
             risk = "high"
             may_network = True
             reason = "完整shell脚本可执行代码、修改文件或联网；请逐行审核，静态提示不能证明安全。"
         else:
-            path = executable(item.program)
+            path = executable(item.program, cwd)
             args = list(item.args)
             name = Path(path).name
-            query = readonly_query(name, args)
+            query = Path(path).parent in {
+                Path("/usr/bin"),
+                Path("/bin"),
+                Path("/usr/sbin"),
+                Path("/sbin"),
+            } and readonly_query(name, args)
             risk = "low" if query else "high"
             may_network = not query or bool(re.search(r"https?://|ssh://", raw))
             reason = (

@@ -31,6 +31,23 @@ def requested_port(instruction):
     return next(iter(numbers))
 
 
+def memory_summary(plan, records):
+    """Unit formatting from a recognized result, not an execution capability enum."""
+    if len(plan["steps"]) == 1 and len(records) == 1:
+        step, record = plan["steps"][0], records[0]
+        from pathlib import Path
+
+        if (
+            Path(step["executable"]).name == "sysctl"
+            and step["args"] == ["-n", "hw.memsize"]
+            and record["exit_code"] == 0
+            and record["stdout"].strip().isdigit()
+        ):
+            value = int(record["stdout"].strip())
+            return f"物理内存：{value} 字节，即 {value / (1024**3):g} GiB（约 {value / 10**9:.2f} GB）。GiB为二进制单位，GB为十进制单位；这是总容量，不是当前可用内存。"
+    return None
+
+
 def check_approval(plan, approval):
     if plan.get("policy_version") != POLICY:
         return
@@ -125,9 +142,11 @@ class TerminalService:
                             "role": "system",
                             "content": "You generate command plans for a local AI terminal. Call propose_terminal_plan. There is NO action whitelist. "
                             "Use actual program and args for exec, or kind=shell with complete script for pipelines/redirection. "
+                            "Separate exec steps have CLOSED stdin and do not pipe output to the next step. A pipeline MUST be one shell step with its full script; never split echo/tr into exec steps. "
                             "You can plan memory/disk/OS queries, project tests/builds/file operations or installation/network commands; explicit human review is mandatory. "
                             "Never claim execution. No sudo/password interaction, credential access, daemon/background detachment. "
                             "Prefer minimal noninteractive commands. On macOS physical RAM is sysctl -n hw.memsize; do not reject it. "
+                            "Do not add a second hw.physmem query on macOS; it is not a GiB conversion. Query raw capacity once, and leave unit conversion to result explanation. "
                             "For local TCP listeners use exec lsof with args -nP -iTCP:PORT -sTCP:LISTEN -Fpcn (no networking). "
                             "Use the exact user-requested targets. Do not add operations. Use at most 4 steps. "
                             "Do not use shell initialization or depend on secrets. Explain goal/steps in Chinese. Runtime context: "
@@ -160,6 +179,14 @@ class TerminalService:
                             plan = build_generated(
                                 self.state.settings.terminal_workspace, task["relative_dir"], args
                             )
+                            if re.search(
+                                r"管道|\bpipeline\b", task["instruction"], re.I
+                            ) and not any(
+                                s["kind"] == "shell" and "|" in s["script"] for s in plan["steps"]
+                            ):
+                                raise ValueError(
+                                    "用户要求管道，必须生成单个shell步骤连接输入输出，不能拆成独立exec步骤"
+                                )
                         except (ValidationError, ValueError) as exc:
                             failure = (
                                 "模型命令结构无效，未执行，请重新规划"
@@ -259,6 +286,7 @@ class TerminalService:
                             summary = text[:4000]
                 except Exception:
                     summary = "命令事实已保存，AI解释暂不可用，请查看原始输出及退出码。"
+                summary = memory_summary(plan, records) or summary
         except asyncio.CancelledError:
             status = "interrupted" if self.stopping else "cancelled"
             error = "已停止本任务；取消不等于回滚已发生修改，未自动重放"

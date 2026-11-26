@@ -58,35 +58,34 @@ interrupted and are never replayed automatically. Run one backend worker only.
 Up to 32 pending/active jobs, 2,000-character instructions and 180 seconds per
 execution are supported, within the Agent's six-step/eight-tool/120-second loop.
 
-## Confirmed AI terminal
+## Confirmed AI terminal V3
 
-Open **/terminal**. Describe a supported read-only task, review the complete command,
-working directory and impact, then click confirm. Planning never launches commands.
-Plans expire after ten minutes; changing instructions/commands/directory requires a
-new plan. Repeated confirmation does not launch duplicates. Output and exit code
-are factual records; the optional local-model summary does not replace them.
+Open **/terminal**, describe the task, review actual commands/scripts and initial cwd,
+then acknowledge account permissions and confirm. New plans are model-generated exec
+or shell steps, not selected from a fixed action enum. Supported goals can include system
+queries, project tests/builds/file operations or installation; success depends on local
+programs and model correctness. Missing executables do not trigger automatic installation.
 
-The fixed catalog supports directory listing/path, Git status/diff statistics/recent
-five commits, Git/Python versions and local TCP listening-port queries. For a port request,
-state one integer port, review the exact lsof command, then confirm; no network required.
-Port facts persist separately from raw output. lsof exit 1 with no stdout/stderr means
-no visible listener, not execution failure; warnings/errors never mean a free port.
-Queries are limited to current-user-visible TCP listeners, not UDP or business identity.
-Existing failed tasks retain their historical error; replan them to use the fixed version.
-No scripts, test execution, installation, writes, network, sudo or interactive input.
-The default workspace is this repository.
-Optionally set `TERMINAL_WORKSPACE` in the local ignored `.env` to a trusted project
-and restart. Root/home/sensitive/symlink directories are rejected. This is not OS
-isolation; untrusted repository contents are not certified safe. Git worktree external
-pointers are not supported in this first scope. macOS/Linux subprocess groups only.
+Every plan needs no-sandbox/account acknowledgement. Shell/unknown code or file effects
+need high-risk review; possibly-networked operations need separate network acknowledgement.
+These acknowledgements are NOT an OS sandbox or firewall. Commands can access the current
+user's files/network beyond initial cwd. Do not authorize untrusted projects/scripts.
+Inference stays local, but an approved command may network. HOME/TMPDIR and public PATH
+are supplied; the entire environment/proxy/secrets are not copied.
 
-Each step has 30 seconds (5 seconds for port queries) and 128KiB combined output, at most
-four steps; a failed command stops later steps. The port-query no-listener exit 1 is
-explicitly classified using stdout/stderr, while preserving its actual exit code.
-Cancel affects only the launched task group and is not rollback.
-Keep the computer/backend running; page refresh/navigation does not cancel confirmed
-work. Interrupted/failed/cancelled/expired tasks can be replanned with new confirmation.
-Execution logs can contain local file names; keep the database out of Git/issues.
+Exec uses resolved program+argv; shell uses fixed bash without init files and with pipefail.
+At most four steps, up to 300 seconds each and 128KiB combined output per step. stdin is
+closed: no password, sudo, PTY or resident service management. Failure stops later steps;
+newly proposed repairs require a new confirmation. Cancel stops the launched group, not
+rollback. Approved tasks survive navigation; service interruption never blindly replays.
+
+Plans expire after ten minutes and exact content/hash acknowledgements are persisted.
+Legacy results remain visible, but new tasks always use V3; replan old rejected requests.
+Default workspace is this repository; configure `TERMINAL_WORKSPACE` in ignored `.env`
+for another trusted project and restart. This restricts only initial cwd, not file access.
+Original stdout/stderr/exit code remain authoritative. Recognized exact lsof TCP queries
+use structured listener facts; sysctl physical RAM has deterministic GiB/GB formatting.
+Other model summaries can still be inaccurate. Runtime records never belong in Git/issues.
 
 ## Configuration and data
 

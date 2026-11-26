@@ -44,6 +44,13 @@
 - [x] Real local model/command acceptance and regression tests.
 - [x] Confirmed local TCP port query, persisted facts and backend-owned error messages.
 
+## Phase 8 — Generated terminal V3
+- [x] Actual exec/program/args and full shell plans rather than a functional action enum.
+- [x] Hash-bound account/high-risk/network confirmation records and backend validation.
+- [x] Real model memory query, synthetic development test and shell redirection acceptance.
+- [x] Separate facts/explanation, deterministic memory unit formatting and bounded execution.
+- [ ] PTY/password interaction, OS/file/network isolation and long-running service management.
+
 ## Phase 5 — Agent & extensions
 - [x] Tool registration and bounded model → tool → observation loop.
 - [x] Durable execution records, source cards and inspection UI.

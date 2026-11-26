@@ -23,7 +23,7 @@ kind exec/shell、program/args或script、description、timeout_seconds（1–30
 
 本地平台信息/工具可用列表仅用于规划，模型不提前执行探测。后端解析程序为
 绝对路径并绑定inode/size/mtime；cwd和计划canonical hash仍不可变。shell固定
-/bin/bash --noprofile --norc -c，不执行用户shell启动文件、不拼接外层字符串。
+/bin/bash --noprofile --norc -o pipefail -c，不执行用户shell启动文件、不拼接外层字符串。
 未安装程序明确提示，不偷偷安装/调用云。失败允许重新生成命令，但必须新确认。
 
 ## 风险、权限与执行
@@ -67,3 +67,11 @@ V3新任务不依赖ACTIONS枚举；旧已完成记录保留，旧待确认计�
 管道+重定向在临时目录；缺少风险/联网确认拒绝；hash/script/argv变动失效、重复
 确认只执行一次；取消/超时/输出/重启/非零保留；旧数据迁移；远端/脚本影响提示；
 既有聊天/知识/jobs和端口回归。物理断网、恶意脚本安全、长期生产、OS沙箱不认证。
+
+## 当前验收
+
+后端第一批b08e5d0自测提交；90后端、18前端回归通过。真实本地Qwen3按原
+“电脑内存”请求生成sysctl，网页确认和刷新后成功；独立查询原始字节一致。
+确定解释为48GiB/约51.54GB，原模型单位错误已补格式化回归。临时合成项目真实
+模型生成Python unittest并1项测试通过，shell管道重定向写入ALPHA并读取核对。
+没有额外包安装/外发/企业资源。完整记录见product-acceptance.md。

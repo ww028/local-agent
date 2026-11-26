@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   target mismatch never executes another port, existing approval bindings remain mandatory.
 
 ### Added
+- Generated terminal V3: model-generated actual exec/argv or full shell script plans instead
+  of a fixed functional catalog. Exact plan review, account/high-risk/network acknowledgements
+  persist before execution. No OS sandbox or network isolation is implied.
+- Direct system/development commands and reviewed shell pipelines/redirection, bounded
+  runtime/output, no shell initialization, pipefail and deterministic memory-unit formatting.
 - Confirmed AI terminal: local-model planning into a fixed read-only catalog, immutable
   hash-bound ten-minute approval, backend execution and separate output/model explanation.
 - Project-directory/Git-status/diff-stat/recent-log/version actions, bounded stdout/stderr,

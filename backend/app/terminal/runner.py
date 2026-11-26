@@ -1,4 +1,4 @@
-"""Bounded fixed subprocess execution. No shell or interactive input."""
+"""Bounded confirmed subprocess execution, including reviewed shell scripts."""
 
 import asyncio
 import os

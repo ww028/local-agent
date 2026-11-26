@@ -1,4 +1,4 @@
-"""Confirmed read-only terminal API; no client-supplied executable or argv."""
+"""Generated command planning and hash-bound explicit user approvals."""
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator

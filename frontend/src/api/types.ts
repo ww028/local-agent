@@ -73,10 +73,14 @@ export interface PortFacts {
   port:number;protocol:string;listening:boolean;scope:string;
   processes:{pid:number;process:string;listeners:string[]}[];
 }
+export interface TerminalApproval {
+  risk_acknowledged:boolean;high_risk_acknowledged:boolean;network_acknowledged:boolean;
+}
 export interface TerminalPlan {
-  goal: string; cwd: string; relative_dir: string; impact: string;
+  policy_version?:string;goal: string; cwd: string; relative_dir: string; impact: string;
+  risk?:string;warnings?:string[];requires_risk_ack?:boolean;requires_high_risk_ack?:boolean;requires_network_ack?:boolean;
   environment: Record<string,string>;
-  steps: { action:string;description:string;executable:string;args:string[];command:string;timeout_seconds:number }[];
+  steps: { action?:string;kind?:string;description:string;executable:string;args:string[];command:string;timeout_seconds:number;risk?:string;risk_reason?:string;may_access_network?:boolean }[];
 }
 export interface TerminalTask {
   task_id:string;instruction:string;status:string;model?:string;relative_dir?:string;
