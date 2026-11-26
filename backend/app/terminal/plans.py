@@ -381,8 +381,74 @@ def all_read_only(plan):
     return bool(steps) and all(read_only_step(step) for step in steps)
 
 
-def step_effects(step):
+OBSERVE_INTENT = re.compile(
+    r"查看|看下|看看|看一下|查一下|查询|列出|列一下|是什么|是多少|多少|多大|几点|"
+    r"有没有|有吗|是否|哪些|啥|什么|版本|型号|信息|占用|几个|谁在|状态|在跑|装着|装了",
+    re.I,
+)
+# Anything that can write, delete, install or reach the network must still be confirmed,
+# whatever the phrasing of the request.
+WRITE_ACTIONS = [
+    r"\brm\b",
+    r"\brmdir\b",
+    r"\bmv\b",
+    r"\bcp\b",
+    r"\bdd\b",
+    r"\btruncate\b",
+    r"\btouch\b",
+    r"\bmkdir\b",
+    r"\bln\b",
+    r"\btee\b",
+    r"\bchmod\b",
+    r"\bchown\b",
+    r"\bkill(?:all)?\b",
+    r"\bpkill\b",
+    r"\bshutdown\b|\breboot\b|\bdiskutil\b",
+    r"\bsed\s+-i\b",
+    r"\b(?:brew|apt|apt-get|yum|dnf|port|pip|pip3|npm|yarn|pnpm|gem|cargo|rustup|"
+    r"go)\s+(?:install|uninstall|remove|rm|add|update|upgrade|get|link)\b",
+    r"\bgit\s+(?:add|commit|push|pull|reset|checkout|switch|restore|clean|merge|rebase|"
+    r"stash|tag|init|clone|rm|mv|apply|cherry-pick|remote|config)\b",
+    r"\bgit\s+branch\s+.*-[dD]\b",
+    r"(?i)\b(?:mysql|psql|sqlite3|mongosh|redis-cli)\b.*\b(?:drop|delete|truncate|insert|"
+    r"update|alter|create|grant|flush|shutdown|set)\b",
+    r"\bsudo\b|\bdoas\b|\bxargs\b",
+    r"\b(?:sh|bash|zsh|fish|python[\d.]*|node|perl|ruby|php)\s+[^-\s]\S*",
+    r"\b(?:sh|bash|zsh|fish|python[\d.]*|node|perl|ruby|php)\s+(?:-c|-e|--eval)\b",
+    r"\bosascript\b|\bdefaults\s+write\b|\bnetworksetup\b|\bsystemctl\b",
+    r"\blaunchctl\s+(?:load|unload|bootout|bootstrap|kickstart|enable|disable|start|stop|submit)\b",
+    r"\bopen\b|\bcurl\b|\bwget\b|\bnc\b|\bssh\b|\bscp\b|\brsync\b",
+    r"\bdocker\s+(?:run|rm|stop|start|restart|exec|build|push)\b",
+    r"find\b.*-(?:exec|execdir|delete|ok|okdir|fprint)",
+    r"\btar\b.*(?:-x|-c)\b",
+]
+
+
+def writes_anything(step):
+    """True when a step could change files, settings, packages or reach the network."""
+    raw = step.get("script") or step.get("command") or ""
+    text = ALLOWED_REDIRECTS.sub("", raw)
+    if re.search(r"(?<![0-9&])>>?(?![&>])", text):
+        return True
+    return any(re.search(pattern, text) for pattern in WRITE_ACTIONS)
+
+
+def observation_proposal(instruction, steps):
+    """A pure "look at something" request runs straight away unless a step can write.
+
+    Read-only is decided by effects on the machine, not by how the request is phrased:
+    a question plus a plan without any write/delete/install/network action executes
+    directly; the hard blocks above still force a confirmation.
+    """
+    if not OBSERVE_INTENT.search(instruction or ""):
+        return False
+    return bool(steps) and not any(writes_anything(step) for step in steps)
+
+
+def step_effects(step, read_intent=False):
     """Plain-language consequences for people who do not read command syntax."""
+    if read_intent and not writes_anything(step):
+        return ["只读取信息，不会修改文件或系统设置"]
     if read_only_step(step):
         return ["只读取信息，不会修改文件或系统设置"]
     found = []
@@ -415,7 +481,7 @@ def detect_port_query(path, args):
     return int(match[1])
 
 
-def build_generated(workspace, relative, proposal):
+def build_generated(workspace, relative, proposal, instruction=""):
     proposal = GeneratedProposal.model_validate(proposal)
     if proposal.unsupported_reason or not proposal.steps:
         raise ValueError(
@@ -476,10 +542,11 @@ def build_generated(workspace, relative, proposal):
             step.update({"action": "check_port", "port": port})
         steps.append(step)
     stat = cwd.stat()
-    auto_run = all_read_only({"steps": steps})
+    observation = observation_proposal(instruction, steps)
+    auto_run = all_read_only({"steps": steps}) or observation
     effects = []
     for step in steps:
-        effects.extend(step_effects(step))
+        effects.extend(step_effects(step, read_intent=observation))
     effects = list(dict.fromkeys(effects))
     impact = "；".join(effects) + "。取消不回滚已发生的改动。"
     warnings = (
@@ -501,6 +568,7 @@ def build_generated(workspace, relative, proposal):
     return {
         "policy_version": POLICY,
         "goal": proposal.goal,
+        "instruction": instruction,
         "workspace": str(Path(workspace)),
         "relative_dir": relative,
         "cwd": str(cwd),
@@ -509,6 +577,7 @@ def build_generated(workspace, relative, proposal):
         "environment": environment,
         "impact": impact,
         "effects": effects,
+        "observation": observation,
         "auto_run": auto_run,
         "risk": "high" if high else "low",
         "warnings": warnings,
@@ -540,7 +609,9 @@ def verify_generated(workspace, plan, expected_hash):
     for item, saved in zip(proposal["steps"], plan["steps"]):
         if item["kind"] == "exec":
             item["program"] = saved["executable"]
-    rebuilt = build_generated(workspace, plan["relative_dir"], proposal)
+    rebuilt = build_generated(
+        workspace, plan["relative_dir"], proposal, instruction=plan.get("instruction", "")
+    )
     for item, saved in zip(rebuilt["steps"], plan["steps"]):
         item["program"] = saved["program"]
     if canonical(rebuilt) != canonical(plan):
@@ -689,6 +760,7 @@ VERSION_TOOLS = {
     "bun": "Bun",
     "java": "Java",
 }
+VERSION_ALIASES = {"python": "python3", "pip": "pip3", "nodejs": "node", "golang": "go"}
 VERSION_STOP = re.compile(
     r"内存|cpu|核数|端口|目录|磁盘|进程|安装|升级|删除|运行|测试|状态|配置|文件", re.I
 )
@@ -707,8 +779,26 @@ def detect_version_query(instruction):
         pattern = rf"(?<![A-Za-z0-9_.-]){re.escape(name)}(?:\.js)?(?![A-Za-z0-9_.-])"
         if re.search(pattern, instruction, re.I):
             mentioned.append(name)
+    if not mentioned:
+        # Any single tool name that actually resolves on this machine counts ("python 版本呢？").
+        resolved_candidates = {}
+        search = os.pathsep.join(
+            [*USER_TOOL_DIRS, "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
+        )
+        for word in re.findall(r"[A-Za-z][A-Za-z0-9_.+-]*", instruction):
+            for candidate in (word, VERSION_ALIASES.get(word)):
+                path = shutil.which(candidate, path=search) if candidate else None
+                if path:
+                    resolved_candidates[word] = (candidate, path)
+                    break
+        if len(resolved_candidates) != 1:
+            return None
+        name, path = next(iter(resolved_candidates.values()))
+        return name, path
     if len(mentioned) != 1:
         return None
+    if mentioned[0] in VERSION_ALIASES:
+        mentioned[0] = VERSION_ALIASES[mentioned[0]]
     tool = mentioned[0]
     # Ask the machine's own toolchain first; the workbench venv only answers if nothing else exists.
     user_first = os.pathsep.join(

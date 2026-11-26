@@ -372,3 +372,27 @@ def test_inventory_scope_covers_real_install_dirs(tmp_path):
     assert "/opt/homebrew/bin" in scoped
     plain = normalize_for_intent("列出目录", proposal)["steps"][0]["script"]
     assert plain == script
+
+
+def test_observation_intent_blocks_any_writing_step():
+    from app.terminal.plans import observation_proposal, writes_anything
+
+    read = {"kind": "shell", "command": "ls -l /tmp | head -20"}
+    assert observation_proposal("看一下 /tmp 里有哪些文件", [read]) is True
+    assert writes_anything({"kind": "shell", "command": "cp a b"}) is True
+    assert writes_anything({"kind": "shell", "command": "bash scripts/start.sh"}) is True
+    assert writes_anything({"kind": "shell", "command": "python3 -c 'open(1)'"}) is True
+    assert writes_anything({"kind": "exec", "command": "/usr/bin/git push"}) is True
+    assert writes_anything({"kind": "shell", "command": "ls /tmp 2>/dev/null"}) is False
+    rm = {"kind": "shell", "command": "rm -f /tmp/x"}
+    assert observation_proposal("看看哪个文件能删掉", [rm]) is False
+    # Statements that change a database are writes even inside a read-only client.
+    assert writes_anything({"kind": "exec", "command": "/opt/homebrew/bin/mysql -e 'drop db x'"})
+    assert writes_anything({"kind": "exec", "command": "/usr/bin/git branch -D feature"}) is True
+
+
+def test_python_alias_hits_version_fast_path():
+    from app.terminal.plans import detect_version_query
+
+    resolved = detect_version_query("我的python 版本呢？")
+    assert resolved is not None and resolved[0] == "python3"

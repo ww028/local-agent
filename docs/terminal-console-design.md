@@ -137,3 +137,39 @@
 验收：问“我的电脑上目前有啥数据库啊”自动执行（无确认卡），一条只读管道覆盖
 `/opt/homebrew/bin`，结果给出 `mysql`、`sqlite3`；`ls | grep` 无匹配时给“没有找到匹配项”
 而不是失败红字。后端 99 项用例通过。
+
+### 确认策略 REDESIGN：按“会不会改东西”判断，不按工具白名单（2026-11-26 追加）
+
+用户第三条反馈点破根因：判断逻辑本身不对——白名单式“可证明只读”永远追不上用户下一个
+问题，于是同一个“查看”请求时而免确认、时而又弹卡（`python 版本呢？` 被解析成
+DoubaoWork 沙箱里的 python3.14，不在受信任目录 → 确认；确认卡还写“可能访问网络”）。
+
+新策略只有两条判据，不再枚举工具：
+
+1. **请求是不是“看”**：`OBSERVE_INTENT`（查看/看看/查一下/查询/列出/是什么/多少/
+   有没有/哪些/版本/型号/状态/装了…）。是“看”，默认直接执行。
+2. **命令会不会改东西**：`writes_anything(step)` 硬拦截写、删、装、改设置、联网——
+   `rm/rmdir/mv/cp/dd/truncate/touch/mkdir/ln/tee/chmod/chown/kill(pkill)/shutdown/
+   diskutil/sed -i`、写文件重定向（`>`/`>>`，`/dev/null` 除外）、`brew|apt|pip|npm|
+   yarn|pnpm|gem|cargo|go + install/update/remove`、`git add|commit|push|pull|reset|
+   checkout|switch|restore|clean|merge|rebase|stash|tag|init|clone|remote|config|
+   branch -D`、`sudo/doas/xargs`、解释器带脚本或 `-c/-e`（`bash scripts/start.sh`、
+   `python3 -c ...`）、`osascript/defaults write/networksetup/systemctl/launchctl
+   load|unload|...`、`open/curl/wget/nc/ssh/scp/rsync`、`docker run|rm|...`、
+   `find -exec/-delete`、`tar -x/-c`，以及数据库客户端里的 `drop/delete/insert/
+   update/alter/...`。
+   命中任意一条就回到确认，不管问句多么像“查看”。
+
+两条同时满足 → `observation=True`、`auto_run=True`，审计标记
+`{"auto_observe": true}`；执行前 `check_approval()` 用同一套判据复验，防止保存后被改。
+确认卡的影响文案对这类计划统一写“只读取信息，不会修改文件或系统设置”。
+
+顺带把版本查询兜底做到通用：不再依赖工具名表，问“X 版本呢”时把句子里能 `which`
+到的唯一工具作为目标（`python`→`python3`、`pip`→`pip3`、`nodejs`→`node` 有别名），
+所以“我的python 版本呢？”直接走确定性路径，结果为“Python 版本：3.9.6”。
+
+验收（真实环境）：
+- “我的python 版本呢？”→ 免确认，`/usr/bin/python3 --version`，结果“Python 版本：3.9.6”。
+- “看看我的磁盘还剩多少”→ 免确认，`/bin/df -h`，结果“磁盘剩余空间：665Gi”。
+- “在 /tmp 下新建一个 a.txt 写 hello”→ 仍要求确认（`echo ... > /tmp/a.txt` 命中写重定向）。
+- 后端 101 项用例通过。

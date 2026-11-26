@@ -72,7 +72,8 @@ def test_read_only_auto_runs_and_mutating_waits(tmp_path):
         assert planned["status"] == "completed" and len(planned["steps"]) == 2
         assert planned["plan"]["auto_run"] is True
         assert planned["plan"]["effects"] == ["只读取信息，不会修改文件或系统设置"]
-        assert json.loads(planned["approval"])["auto_readonly"] is True
+        approval = json.loads(planned["approval"])
+        assert approval.get("auto_readonly") or approval.get("auto_observe")
         assert (
             c.post("/api/terminal", json={"instruction": "x", "command": "anything"}).status_code
             == 422

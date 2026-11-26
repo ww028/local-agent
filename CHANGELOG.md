@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Confirmation is now decided by effects, not by a tool whitelist: a "look at something"
+  request (查看/看看/查询/列出/是什么/多少/版本/状态…) executes directly unless any step can
+  write, delete, install, change settings or reach the network (`writes_anything()`), in which
+  case it still asks. `observation` plans are audited as `{"auto_observe": true}` and are
+  re-verified before launch. This ends the "one tool, one whitelist entry" treadmill.
+- Version questions no longer depend on a fixed tool table: the single tool name in the
+  sentence that actually resolves on the machine is used (`python`→`python3`, `pip`→`pip3`,
+  `nodejs`→`node`), so "我的python 版本呢？" answers "Python 版本：3.9.6" without a click.
 - Read-only shell scripts now run without confirmation as a matter of principle rather than a
   per-tool whitelist: `read_only_script()` strips allowed redirects, rejects command
   substitution, pipes, chaining and any mutating segment, then proves every segment starts

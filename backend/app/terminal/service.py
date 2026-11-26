@@ -20,6 +20,7 @@ from app.terminal.plans import (
     read_only_step,
     verify_any,
     version_proposal,
+    writes_anything,
 )
 from app.terminal.runner import execute_step
 
@@ -129,10 +130,16 @@ def check_approval(plan, approval):
     if plan.get("policy_version") != POLICY:
         return
     if plan.get("auto_run"):
-        # Verified read-only plans run without a click; re-verify before launching.
-        if not approval.get("auto_readonly") or not all_read_only(plan):
-            raise ValueError("只读计划校验失败，需要重新规划并确认")
-        return
+        # Plans that touch nothing run without a click; re-verify before launching.
+        if not (approval.get("auto_readonly") or approval.get("auto_observe")):
+            raise ValueError("免确认计划缺少审计标记，需要重新规划并确认")
+        if all_read_only(plan):
+            return
+        if plan.get("observation") and not any(
+            writes_anything(step) for step in plan.get("steps") or []
+        ):
+            return
+        raise ValueError("免确认计划校验失败，需要重新规划并确认")
     if not approval.get("risk_acknowledged"):
         raise ValueError("请确认当前用户账号权限和无OS沙箱限制")
     if plan["requires_high_risk_ack"] and not approval.get("high_risk_acknowledged"):
@@ -218,10 +225,13 @@ class TerminalService:
                     self.state.settings.terminal_workspace,
                     task["relative_dir"],
                     version_proposal(tool, executable),
+                    instruction=task["instruction"],
                 )
                 self.repo.save_plan(key, plan)
                 if plan.get("auto_run"):
-                    self.repo.auto_confirm(key)
+                    self.repo.auto_confirm(
+                        key, {"auto_observe": True} if plan.get("observation") else None
+                    )
                 return
             async with asyncio.timeout(150):
                 async with self.state.chat_lock:
@@ -299,6 +309,7 @@ class TerminalService:
                                 self.state.settings.terminal_workspace,
                                 task["relative_dir"],
                                 normalize_for_intent(task["instruction"], args),
+                                instruction=task["instruction"],
                             )
                             if re.search(
                                 r"管道|\bpipeline\b", task["instruction"], re.I
@@ -324,8 +335,10 @@ class TerminalService:
                             continue
                         self.repo.save_plan(key, plan)
                         if plan.get("auto_run"):
-                            # Verified read-only plan: execute without a confirmation click.
-                            self.repo.auto_confirm(key)
+                            # Verified read-only or pure-observation plan: no click needed.
+                            self.repo.auto_confirm(
+                                key, {"auto_observe": True} if plan.get("observation") else None
+                            )
                         return
                     raise ValueError(failure)
         except asyncio.CancelledError:
