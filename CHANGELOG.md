@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- The terminal now accounts for the model's context window instead of silently overflowing it:
+  `prompt_budget()` (= `num_ctx - num_predict - 512`, the same byte-as-token convention used by
+  chat and the agent) is checked before planning; a prompt that cannot fit fails with the exact
+  numbers and advice to shorten or raise NUM_CTX, and otherwise the oldest transcript turns are
+  dropped until the history fits. Summary evidence length is now `min(3000, remaining budget)`
+  rather than a fixed 3000 characters.
 - Confirmation is now decided by effects, not by a tool whitelist: a "look at something"
   request (查看/看看/查询/列出/是什么/多少/版本/状态…) executes directly unless any step can
   write, delete, install, change settings or reach the network (`writes_anything()`), in which

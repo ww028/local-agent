@@ -396,3 +396,57 @@ def test_python_alias_hits_version_fast_path():
 
     resolved = detect_version_query("我的python 版本呢？")
     assert resolved is not None and resolved[0] == "python3"
+
+
+def test_session_context_respects_byte_budget():
+    import json
+
+    from app.terminal.service import session_context
+
+    class Repo:
+        def __init__(self):
+            self.tasks = [
+                {
+                    "task_id": f"t{i}",
+                    "status": "completed",
+                    "instruction": "查询" + "很长的需求" * 40,
+                    "plan": {"steps": [{"command": "/bin/ls " + "x" * 80}]},
+                    "steps": [{"stdout": "y" * 600, "stderr": "", "exit_code": 0}],
+                }
+                for i in range(8)
+            ]
+
+        def transcript(self, limit):
+            return self.tasks[-limit:]
+
+    full = session_context(Repo(), "t9", budget=None)
+    tight = session_context(Repo(), "t9", budget=500)
+    assert len(full) <= 6
+    assert len(json.dumps(tight, ensure_ascii=False).encode()) <= 500
+    assert tight == [] or tight[-1]["request"].startswith("查询")
+
+
+def test_prompt_over_budget_reports_instead_of_overflowing(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from app.config import Settings
+    from app.main import create_app
+    from tests.test_terminal import PlanningModel, wait
+
+    settings = Settings(
+        _env_file=None,
+        data_dir=tmp_path / "data",
+        db_path=tmp_path / "data/db",
+        lancedb_dir=tmp_path / "lance",
+        terminal_workspace=tmp_path,
+        llm_model="test:local",
+        num_ctx=3072,
+        num_predict=1024,
+    )
+    app = create_app(settings, PlanningModel())
+    with TestClient(app, base_url="http://127.0.0.1") as c:
+        response = c.post("/api/terminal", json={"instruction": "查一下磁盘空间"})
+        assert response.status_code == 202, response.text
+        task = wait(c, response.json()["task_id"], {"failed", "completed", "awaiting_confirmation"})
+        assert task["status"] == "failed"
+        assert "上下文预算" in (task["error"] or "")
