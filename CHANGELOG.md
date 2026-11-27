@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Latest workbench and reliability changes
+- Merged navigation and recent conversations into one sidebar; removed duplicate new/search controls.
+- Added question-anchor navigation and bounded context usage; retained complete SQLite history.
+- Added terminal conversation rename/delete, rejecting deletion with active tasks.
+- Fixed history/menu row alignment and horizontal overflow, bounded question-directory scrolling,
+  and restored terminal command/output typography without dialogue bubbles/avatars.
+- Added opt-in thinking and exact verification for full-match decimal comparisons / ASCII letter counts.
+- Added a seven-case local evaluation script. Draft-review remains experimental and is not routed
+  into normal chat because it regressed correct answers. Keyword match totals are not accuracy.
+- Audited documentation: added navigation, evolution, issue/decision log and failed reasoning
+  experiments; corrected stale current-state descriptions and marked historical plans explicitly.
+
+The entries below preserve earlier iterations; replaced layouts and confirmation policies are
+historical, not simultaneous current guarantees. See docs/README.md for current reading order.
+
+
 ### Added
 - The console now has a Doubao-Work-style layout: a fixed left nav, a conversation list
   (`GET /api/terminal/conversations`, title from the first request, count and time) that switches

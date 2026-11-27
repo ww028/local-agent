@@ -36,10 +36,13 @@ The initial local chat model is `qwen3:14b`, Q4_K_M, approximately 9.3 GB,
 with Apache-2.0 model license, as listed by the official model registry:
 https://ollama.com/library/qwen3:14b
 
-The application uses `think: false` for phase-1 answer-only streams and an
-8K context budget; it does not claim full native context performance. Model
-file size is not total runtime memory. Record actual runtime measurements
-separately after installation.
+The initial phase used `think: false`. Current chat offers opt-in bounded thinking;
+Agent remains non-thinking, and exact decimal/ASCII letter questions in deep plain-chat
+use deterministic verification. Thinking does not imply better accuracy: local traps and
+review regressions are recorded in [reasoning-reliability.md](reasoning-reliability.md).
+The rows above are candidates, not a comparative benchmark or verified speed/memory promise.
+An 8K configured context is not a claim of full native context performance. Model file
+size is not total runtime memory; record runtime measurements separately.
 
 ## Licensing note
 

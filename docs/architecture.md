@@ -6,7 +6,8 @@ features. The application is not a multi-tenant service or a security sandbox.
 
 ## Runtime layers
 
-- React/TypeScript/Vite: chat, documents, background jobs and execution history.
+- React/TypeScript/Vite: single navigation/history sidebar, central chat/terminal,
+  right question/context inspector, documents, background jobs and execution history.
 - FastAPI: loopback API, SSE chat and packaged static Web UI.
 - `ollama_client.py`: installed-model validation, streaming chat, structured
   tool decisions and dense embedding calls to local Ollama only.
@@ -67,7 +68,9 @@ or a full shell script, not a functional action enum. The backend resolves progr
 binds directory/executable identity and exact content to an immutable plan hash. Scripts
 run via a fixed bash launcher with no initialization files and pipefail; exec avoids shell.
 
-All plans require explicit current-account/no-sandbox acknowledgement. The console's
+Observation requests without detected modifying effects can auto-run and record that decision;
+other plans require explicit current-account/no-sandbox acknowledgement. Effect detection is
+heuristic, not a proof that arbitrary executables cannot mutate state. The console's
 `y` answer is one explicit confirmation carrying the account/high-risk/network records
 for the plan shown on screen; potential code/file effects and network access are listed
 before it is accepted. Warnings are heuristic, not an isolation boundary: arbitrary
@@ -88,8 +91,21 @@ Recognized exact local lsof results retain structured port facts. Sysctl physica
 output has deterministic GiB/GB formatting; other summaries remain model interpretations.
 See [generative-terminal-design.md](generative-terminal-design.md).
 
+## Chat context and answer reliability
+
+`chat_context.py` budgets UTF-8 bytes conservatively, reserves output and safety overhead,
+and removes oldest complete exchanges from model input while SQLite keeps full history.
+The context endpoint exposes used/remaining and included/total turns; it is not exact tokenizer accounting.
+Deep mode uses bounded Ollama thinking except full-match decimal comparison and ASCII letter
+count questions in plain chat, which use `answer_review.exact_answer`. The draft-review function
+is experimental and is not called by production chat routes: local tests showed regressions.
+Agent mode does not accept deep mode. See [reasoning-reliability.md](reasoning-reliability.md).
+
 ## SQLite records
 
+- `terminal_conversations` / `terminal_tasks` / `terminal_steps`: terminal titles, plans,
+  approvals and actual outputs. Rename changes title only; delete refuses active tasks and
+  otherwise removes the conversation's task/step records.
 - `documents` / `chunks` / FTS5: uploaded metadata, chunk text and keyword index.
 - `conversations` / `messages`: history, reply state and source citations.
 - `runs` / `run_events`: durable model/tool action records.

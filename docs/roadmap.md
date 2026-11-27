@@ -1,5 +1,19 @@
 # Roadmap
 
+## Current workbench and reliability follow-up
+- [x] Single sidebar, central chat/terminal and right question/context inspector.
+- [x] Terminal rename/delete and current-view question anchors.
+- [x] Fix observed history overflow/menu wrapping and preserve context visibility.
+- [x] Add limited exact decimal / ASCII letter verification and local evaluation entry.
+- [x] Document evolution, encountered problems, rejected experiments and current boundaries.
+- [ ] Strict answer/reason evaluation with versioned public outputs; replace keyword screening.
+- [ ] Compare local models on held-out traps and opposing control questions.
+- [ ] Restart and end-to-end verify latest reasoning backend path.
+- [ ] Full-history terminal directory, accessibility and cross-browser/mobile regression matrix.
+- [ ] Clean-machine installation, license/security review and versioned open-source release.
+
+The phase sections below describe historical delivery milestones, not one combined security scope.
+
 ## Phase 0 — Environment scaffold
 - [x] Repository layout, MIT license, ignore rules, example env.
 - [x] FastAPI skeleton with health check and pluggable interfaces.

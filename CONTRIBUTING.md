@@ -32,6 +32,15 @@ See [docs/setup.md](docs/setup.md). In short:
 Tools live in `backend/app/agent/tools/`. Implement the tool interface, register it in the
 agent executor, and document its inputs/outputs in the tool module docstring.
 
+## Documentation is part of the change
+
+Read [docs/README.md](docs/README.md). Record reproducible problems, evidence, chosen/rejected
+approaches, implementation references, tests and remaining risks in the issue/decision log.
+Update current architecture and README when capability changes; keep superseded designs clearly
+marked historical. Record failed experiments as well as successful ones. Never present keyword
+matches, mock tests or one machine's results as general accuracy, performance or security proof.
+Use public/synthetic examples; do not commit runtime databases, private inputs or hidden thinking.
+
 ## Reporting issues
 
 Use the issue templates under `.github/ISSUE_TEMPLATE/`. Include environment (OS, Python/Node
