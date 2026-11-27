@@ -23,6 +23,7 @@ from app.terminal.plans import (
     writes_anything,
 )
 from app.terminal.runner import execute_step
+from app.terminal.termination import termination_targets, preflight, revalidate, postflight
 
 
 def requested_port(instruction):
@@ -451,8 +452,16 @@ class TerminalService:
                 )
                 approval = json.loads(task.get("approval") or "{}")
                 check_approval(plan, approval)
+                targets = termination_targets(plan)
+                identities = await preflight(targets) if targets else None
                 status = "completed"
                 for index, step in enumerate(plan["steps"]):
+                    if targets:
+                        current_pids = await revalidate(targets, identities)
+                        if step.get('kind') == 'exec' and step.get('program') == 'kill':
+                            step_pids = {int(a) for a in step['args'] if str(a).isdigit()}
+                            if not step_pids.issubset(current_pids):
+                                raise ValueError('该步骤的目标已不再监听原端口，停止执行，请重新规划。')
                     verify_any(self.state.settings.terminal_workspace, plan, task["plan_hash"])
                     step_index = index
                     self.repo.start_step(key, index)
@@ -478,6 +487,15 @@ class TerminalService:
                         status, error = "failed", result["error"]
                         break
                 records = self.repo.get(key)["steps"]
+                if targets and status == "completed":
+                    verified, digest = await postflight(targets)
+                    summary = digest
+                    if not verified:
+                        status, error = "failed", "执行后目标验证未通过，未自动重试。"
+                    return
+                if status == "completed" and records and all(r['exit_code'] == 0 and not r['stdout'].strip() and not r['stderr'].strip() for r in records):
+                    digest = summary = "命令已执行并正常返回（退出码0），没有文本输出；未配置效果验证，不能据此保证业务目标完成。"
+                    return
                 evidence = json.dumps(
                     [
                         {
