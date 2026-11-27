@@ -233,7 +233,9 @@ kbd { font-family:inherit; border:1px solid #c8d1e0; border-bottom-width:2px; bo
 .history-item button:first-child,.console-chat-open {flex:1;min-width:0;font-size:13px;padding:8px 0;border:0;background:transparent;color:inherit;text-align:left;}
 .history-item button:last-child {padding:0 6px;color:#999;opacity:0;}.history-item:hover button:last-child,.history-item:focus-within button:last-child {opacity:1;}
 .console-chats-head {border:0;display:block;padding:0;}.console-chats-list {overflow:visible;display:block;padding:0;}
-.console-chat {padding:10px 8px;}.console-chat-title {max-width:100%;font-size:13px;}.console-chat-meta {display:none;}
+.console-chat {padding:4px 8px;flex-direction:row;min-width:0;}.console-chat-open {overflow:hidden;white-space:nowrap;}.console-chat-title {display:block;max-width:100%;font-size:13px;}.console-chat-meta {display:none;}
+.sidebar-conversations {overflow-x:hidden;}
+.console-chat .conversation-more[aria-expanded=true] {opacity:1;background:#e9e9e9;}
 .console-chat .conversation-more {display:grid;place-items:center;flex:0 0 28px;height:28px;border-radius:7px;padding:0 6px;color:#999;opacity:0;background:transparent;border:0;}
 .console-chat:hover .conversation-more,.console-chat:focus-within .conversation-more {opacity:1;}
 .console-chat .conversation-more:hover {background:#e9e9e9;}
@@ -271,5 +273,17 @@ kbd { font-family:inherit; border:1px solid #c8d1e0; border-bottom-width:2px; bo
 
 .question-link {display:block;width:100%;text-align:left;border:0;background:transparent;padding:9px 8px;margin:2px 0;border-radius:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;color:#444;}
 .question-link:hover{background:#f3f3f3;}
+.console-summary > .summary-block:nth-child(2),.chat-summary > .summary-block:nth-child(2) {max-height:30vh;overflow-y:auto;flex-shrink:0;scrollbar-width:thin;}
+.summary-heading {position:sticky;top:0;z-index:2;background:#fff;}
+.console-summary > .summary-block:nth-child(3),.chat-summary > .summary-block:nth-child(3) {position:sticky;top:64px;z-index:1;background:#fff;}
+.terminal-body .t-row.user {justify-content:flex-start;}
+.terminal-body .t-avatar {display:none;}
+.terminal-body .t-bubble.user {max-width:100%;background:none;border:0;border-radius:0;padding:0;font-family:inherit;font-size:13px;color:#222;}
+.terminal-body .t-bubble.user::before {content:'❯ ';color:#239c50;font-weight:700;}
+.terminal-body .t-ai-body {background:none;border:0;border-radius:0;padding:0;}
+.terminal-body .t-result {background:none;border:0;border-left:2px solid #e4e4e4;border-radius:0;padding:6px 12px;}
+.terminal-body .t-result-text,.terminal-body .t-result-prose {font-family:inherit;font-size:13px;font-weight:400;}
+.terminal-body .t-entry {padding:8px 0 18px;border-bottom:1px solid #eee;}
+.terminal-body [id^='terminal-'] {scroll-margin-top:16px;}
 .message-anchor {scroll-margin-top:16px;flex-shrink:0;}
 .message-anchor.user {align-self:flex-end;max-width:80%;}.message-anchor.user .bubble {max-width:100%;}
