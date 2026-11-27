@@ -83,12 +83,14 @@ async def execute_step(step, plan, on_output):
                 await asyncio.sleep(0.05)
         await process.wait()
     facts = None
-    if step.get("action") == "check_port" and (error is None or "退出码" in error):
+    from app.terminal.port_queries import step_port
+    port = step.get('port') if step.get('action') == 'check_port' else step_port(step)
+    if port is not None and (error is None or "退出码" in error):
         from app.agent.diagnostics import DiagnosticError, port_result
 
         try:
             facts = port_result(
-                step["port"],
+                port,
                 process.returncode,
                 display_text(buffers["stdout"]),
                 display_text(buffers["stderr"]),

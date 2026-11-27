@@ -22,6 +22,7 @@ from app.terminal.plans import (
     version_proposal,
     writes_anything,
 )
+from app.terminal.port_queries import query_ports, proposal as port_proposal, summary as port_summary
 from app.terminal.runner import execute_step
 from app.terminal.termination import termination_targets, preflight, revalidate, postflight
 
@@ -58,9 +59,9 @@ def memory_summary(plan, records):
 
 def result_digest(plan, records):
     """Short factual answer derived from known read-only outputs (not model text)."""
-    if records and all(r["exit_code"] == 1 and not (r["stdout"] or "").strip() for r in records):
-        # grep/find/lsof use exit 1 for "nothing matched"; that is an answer, not an error.
-        return "没有找到匹配项（命令退出码 1 表示没有匹配，不是执行出错）"
+    verified = port_summary(records)
+    if verified:
+        return verified
     if len(plan.get("steps", [])) != 1 or len(records) != 1:
         return memory_summary(plan, records)
     from pathlib import Path
@@ -315,6 +316,13 @@ class TerminalService:
     async def _plan(self, task):
         key = task["task_id"]
         try:
+            ports = query_ports(task['instruction'])
+            if ports:
+                plan = build_generated(self.state.settings.terminal_workspace, task['relative_dir'], port_proposal(ports), instruction=task['instruction'])
+                self.repo.save_plan(key, plan)
+                if plan.get('auto_run'):
+                    self.repo.auto_confirm(key, {'auto_observe': True})
+                return
             fast = detect_version_query(task["instruction"])
             if fast is not None:
                 tool, executable = fast
@@ -471,10 +479,8 @@ class TerminalService:
                     if result.get("facts"):
                         self.repo.save_facts(key, index, result["facts"])
                     effective = result["status"]
-                    if effective != "completed" and read_only_step(step):
-                        # grep/find/lsof answer "nothing matched" with exit 1; that is a result,
-                        # not a failure, so later read-only steps keep their chance to answer.
-                        effective = "completed"
+                    # Only adapter-classified no-match is normal; read-only is not success.
+                    # A timeout/permission error must never become completed.
                     self.repo.finish_step(
                         key,
                         index,
@@ -487,6 +493,10 @@ class TerminalService:
                         status, error = "failed", result["error"]
                         break
                 records = self.repo.get(key)["steps"]
+                verified_ports = port_summary(records) if status == 'completed' else None
+                if verified_ports:
+                    digest = summary = verified_ports
+                    return
                 if targets and status == "completed":
                     verified, digest = await postflight(targets)
                     summary = digest

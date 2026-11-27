@@ -357,9 +357,8 @@ def test_grep_alternation_and_no_match_digest(tmp_path):
     )
     assert proposal["steps"][0]["script"] == fixed
     plan = build_generated(tmp_path, ".", proposal)
-    assert result_digest(plan, [{"exit_code": 1, "stdout": "", "stderr": ""}]).startswith(
-        "没有找到匹配项"
-    )
+    # Shell exit 1 alone cannot prove no-match; earlier stages may have failed.
+    assert result_digest(plan, [{"exit_code": 1, "stdout": "", "stderr": ""}]) is None
 
 
 def test_inventory_scope_covers_real_install_dirs(tmp_path):
