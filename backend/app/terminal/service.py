@@ -316,31 +316,12 @@ class TerminalService:
     async def _plan(self, task):
         key = task["task_id"]
         try:
-            ports = query_ports(task['instruction'])
-            if ports:
-                plan = build_generated(self.state.settings.terminal_workspace, task['relative_dir'], port_proposal(ports), instruction=task['instruction'])
+            from app.terminal.capabilities import compile_request
+            plan = await compile_request(self.state.settings.terminal_workspace, task['relative_dir'], task['instruction'])
+            if plan is not None:
                 self.repo.save_plan(key, plan)
                 if plan.get('auto_run'):
-                    self.repo.auto_confirm(key, {'auto_observe': True})
-                return
-            fast = detect_version_query(task["instruction"])
-            if fast is not None:
-                tool, executable = fast
-                if not executable:
-                    raise ValueError(
-                        f"本机 PATH 里没有找到 {tool}（nvm 装的可能没设为默认版本，或没安装）"
-                    )
-                plan = build_generated(
-                    self.state.settings.terminal_workspace,
-                    task["relative_dir"],
-                    version_proposal(tool, executable),
-                    instruction=task["instruction"],
-                )
-                self.repo.save_plan(key, plan)
-                if plan.get("auto_run"):
-                    self.repo.auto_confirm(
-                        key, {"auto_observe": True} if plan.get("observation") else None
-                    )
+                    self.repo.auto_confirm(key, {'auto_observe': True} if plan.get('observation') else None)
                 return
             async with asyncio.timeout(150):
                 async with self.state.chat_lock:
@@ -462,6 +443,8 @@ class TerminalService:
                 check_approval(plan, approval)
                 targets = termination_targets(plan)
                 identities = await preflight(targets) if targets else None
+                if targets and plan.get('target_identities') and {str(pid):identity for pid,identity in identities.items()} != plan['target_identities']:
+                    raise ValueError('进程身份与确认计划不一致，未终止任何进程，请重新规划。')
                 status = "completed"
                 for index, step in enumerate(plan["steps"]):
                     if targets:

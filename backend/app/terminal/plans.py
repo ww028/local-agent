@@ -614,6 +614,9 @@ def verify_generated(workspace, plan, expected_hash):
     )
     for item, saved in zip(rebuilt["steps"], plan["steps"]):
         item["program"] = saved["program"]
+    for field in ('target_ports', 'target_identities'):
+        if field in plan:
+            rebuilt[field] = plan[field]  # immutable metadata already covered by digest
     if canonical(rebuilt) != canonical(plan):
         raise ValueError("目录、程序、环境或策略已变化，必须重新规划")
     return rebuilt
