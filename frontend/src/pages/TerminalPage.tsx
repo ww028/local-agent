@@ -24,10 +24,16 @@ export default function TerminalPage(){
   const stickyRef=useRef(true);
   const scroll=useCallback((force=false)=>{const el=bodyRef.current;if(el&&(force||stickyRef.current))el.scrollTop=el.scrollHeight;},[]);
   const load=useCallback(async()=>{
-    try{const data=await terminalTranscript(30,conversationId||undefined);setTasks(data.tasks);
-      const info=await terminalConversation(conversationId||undefined);
-      setConv(info);if(!conversationId)setConversationId(info.conversation_id);
-      const list=await listTerminalConversations();setChats(list.conversations);setNotice('');
+    try{
+      const list=await listTerminalConversations();setChats(list.conversations);
+      if(!conversationId){
+        if(list.conversations.length)setConversationId(list.conversations[0].conversation_id);
+        else {setTasks([]);setConv(null);}
+        return;
+      }
+      const data=await terminalTranscript(30,conversationId);setTasks(data.tasks);
+      const info=await terminalConversation(conversationId);
+      setConv(info);setNotice('');
       requestAnimationFrame(()=>scroll());}
     catch(e){setNotice(e instanceof Error?e.message:'终端记录读取失败');}
   },[conversationId]);
@@ -83,7 +89,12 @@ export default function TerminalPage(){
     if(busy)return;
     try{
       await deleteTerminalConversation(id);
-      if(id===conversationId)await startNew();else await refreshChats();
+      const remaining=(await listTerminalConversations()).conversations;
+      setChats(remaining);setNotice('');
+      if(id===conversationId){
+        setTasks([]);setConv(null);setInstruction('');setHistory([]);setHistoryIndex(-1);
+        setConversationId(remaining[0]?.conversation_id||'');
+      }
     }
     catch(e){setNotice(e instanceof Error?e.message:'删除失败');}
   };
@@ -117,7 +128,11 @@ export default function TerminalPage(){
     }
     if(!model){setNotice('本机暂无可用模型');return;}
     setBusy(true);
-    try{merge(await proposeTerminal(text,model,directory,conversationId||undefined));setHistory(h=>[...h,text].slice(-50));setHistoryIndex(-1);setInstruction('');setNotice('');scroll(true);}
+    try{
+      let id=conversationId;
+      if(!id){const created=await newTerminalConversation();id=created.conversation_id;setConversationId(id);setConv(created);}
+      merge(await proposeTerminal(text,model,directory,id));setHistory(h=>[...h,text].slice(-50));setHistoryIndex(-1);setInstruction('');setNotice('');scroll(true);
+    }
     catch(e){setNotice(e instanceof Error?e.message:'规划失败');}
     finally{setBusy(false);inputRef.current?.focus();}
   };
