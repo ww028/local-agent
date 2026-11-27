@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.answer_review import exact_answer
 from app.chat_context import compose_chat, cost
 from app.ollama_client import ModelError
 from app.schemas import ChatRequest, ChatStreamEvent
@@ -188,9 +189,15 @@ async def stream_chat(request: Request, body: ChatRequest) -> StreamingResponse:
                             pieces.append(item["content"])
                         yield event(item.pop("type"), **item)
             else:
-                async with aclosing(
-                    state.chat_model.achat(messages, model=model, temperature=body.temperature, **({"reasoning": True, "num_predict": output_budget} if body.reasoning else {}))
-                ) as stream:
+                exact = exact_answer(text) if body.reasoning and body.mode == "chat" and not body.use_knowledge_base else None
+                async def answer_stream():
+                    if exact is not None:
+                        yield exact
+                    else:
+                        async with aclosing(state.chat_model.achat(messages, model=model, temperature=body.temperature, **({"reasoning": True, "num_predict": output_budget} if body.reasoning else {}))) as source:
+                            async for token in source:
+                                yield token
+                async with aclosing(answer_stream()) as stream:
                     async for token in stream:
                         if await request.is_disconnected():
                             return
